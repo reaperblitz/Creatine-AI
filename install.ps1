@@ -1,3 +1,22 @@
+﻿<#
+.SYNOPSIS
+    Creatine installer (bun source install).
+
+.DESCRIPTION
+    Installs the CLI from the GitHub repository into ~/.creatine:
+      1. clone (or update) the repository into ~/.creatine/app
+      2. install its dependencies and run it with bun
+      3. write a "creatine" launcher into ~/.creatine/bin
+      4. add ~/.creatine/bin to PATH
+      5. print the success message
+
+.EXAMPLE
+    irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1 | iex
+
+.EXAMPLE
+    $installer = irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1
+    & ([scriptblock]::Create($installer)) -NoModifyPath
+#>
 [CmdletBinding()]
 param(
     [Alias('h')]
@@ -7,29 +26,73 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Keep native exit codes observable on PowerShell 7.4+ instead of throwing.
+if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+
+$AppName = 'creatine'
+$RepoUrl = if ($env:CREATINE_REPO_URL) { $env:CREATINE_REPO_URL } else { 'https://github.com/reaperblitz/Creatine-AI.git' }
+
+# Windows PowerShell 5.1 neither interprets ANSI escapes nor needs the
+# -UseBasicParsing workaround of Invoke-WebRequest.
+$IsWindowsPowerShell = $PSVersionTable.PSVersion.Major -lt 6
+$e = [char]27
+$MUTED = if ($IsWindowsPowerShell) { '' } else { "$e[0;2m" }
+$RED = if ($IsWindowsPowerShell) { '' } else { "$e[0;31m" }
+$ORANGE = if ($IsWindowsPowerShell) { '' } else { "$e[38;5;214m" }
+$NC = if ($IsWindowsPowerShell) { '' } else { "$e[0m" }
+
+function Write-Info { param([string]$Message) Write-Host "${ORANGE}$Message${NC}" }
+function Write-Detail { param([string]$Message) Write-Host "${MUTED}$Message${NC}" }
+function Stop-WithError {
+    param([string]$Message)
+    Write-Host "${RED}$Message${NC}"
+    exit 1
+}
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][string]$File,
+        [string[]]$Arguments = @()
+    )
+    # Native stderr must not be captured, otherwise a non zero exit code is
+    # turned into a terminating NativeCommandError under $ErrorActionPreference.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $File @Arguments | Out-Host
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    return $code
+}
 
 if ($Help) {
     Write-Host @"
-Creatine Installer (Bun Source Mode)
+Creatine Installer (bun source install)
+
+Clones the repository into ~/.creatine/app, installs its dependencies with bun,
+writes a '$AppName' launcher into ~/.creatine/bin and adds it to PATH.
 
 Usage: install.ps1 [-NoModifyPath]
 
 Options:
     -h, -Help        Display this help message
-    -NoModifyPath    Don't modify system/user PATH environment variable
+    -NoModifyPath    Don't modify the user PATH, only print the steps
+
+Environment:
+    CREATINE_REPO_URL   Repository to install from (default: $RepoUrl)
 
 Examples:
     irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1 | iex
+
+To pass options, run the script block instead of piping it into iex:
+    `$installer = irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1
+    & ([scriptblock]::Create(`$installer)) -NoModifyPath
 "@
     exit 0
 }
-
-# ANSI Escape Sequences for Terminal Colors
-$e = [char]27
-$MUTED  = "$e[0;2m"
-$RED    = "$e[0;31m"
-$ORANGE = "$e[38;5;214m"
-$NC     = "$e[0m"
 
 # 1. Check for Bun Requirement
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
@@ -38,98 +101,164 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-# Set up installation paths (Fixed missing spaces after Join-Path)
-$CREATINE_HOME = Join-Path$env:USERPROFILE ".creatine"
-$APP_DIR       = Join-Path$CREATINE_HOME "app"
-$BIN_DIR       = Join-Path$CREATINE_HOME "bin"
+# 2. Set up installation paths
+$CreatineHome = Join-Path $env:USERPROFILE ".creatine"
+$AppDir = Join-Path $CreatineHome "app"
+$BinDir = Join-Path $CreatineHome "bin"
+$PackageDir = Join-Path $AppDir "packages\opencode"
+$EntryPoint = "src/index.ts"
+$Launcher = Join-Path $BinDir "$AppName.cmd"
 
-New-Item -ItemType Directory -Force -Path $BIN_DIR | Out-Null
+New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
-Write-Host "`n${MUTED}Installing ${NC}creatine ${MUTED}from source using Bun...${NC}"
+Write-Host "`n${MUTED}Installing ${NC}$AppName ${MUTED}from source using Bun...${NC}"
 
-# 2. Download or Clone Source Code into ~/.creatine/app
-if (Get-Command git -ErrorAction SilentlyContinue) {
-    if (Test-Path $APP_DIR) {
-        Write-Host "${ORANGE}Updating existing source repository...${NC}"
-        git -C "$APP_DIR" pull --quiet
-    } else {
-        Write-Host "${ORANGE}Cloning GitHub repository...${NC}"
-        git clone --quiet https://github.com/reaperblitz/Creatine-AI.git "$APP_DIR"
+# 3. Download or Clone Source Code into ~/.creatine/app
+if (Test-Path (Join-Path $AppDir ".git")) {
+    Write-Info "Updating existing source repository..."
+    if ((Invoke-Native -File git -Arguments @("-C", $AppDir, "pull", "--ff-only", "--quiet")) -ne 0) {
+        Stop-WithError "Failed to update $AppDir. Delete it and run this script again: Remove-Item -Recurse -Force '$AppDir'"
+    }
+} elseif (Get-Command git -ErrorAction SilentlyContinue) {
+    if (Test-Path $AppDir) {
+        Write-Info "Removing existing directory that is not a git checkout..."
+        Remove-Item -Path $AppDir -Recurse -Force
+    }
+    Write-Info "Cloning GitHub repository..."
+    if ((Invoke-Native -File git -Arguments @("clone", "--quiet", "--depth", "1", $RepoUrl, $AppDir)) -ne 0) {
+        Stop-WithError "Failed to clone $RepoUrl"
     }
 } else {
-    Write-Host "${ORANGE}Git not found. Downloading repository ZIP...${NC}"
-    $tempZip = Join-Path $env:TEMP "creatine_src_$PID.zip"
-    $tempExtract = Join-Path $env:TEMP "creatine_src_$PID"
-    
+    Write-Info "Git not found. Downloading repository archive..."
+    if (-not $RepoUrl.TrimEnd('/').StartsWith('https://github.com/')) {
+        Stop-WithError "Git is required to install from a non GitHub repository ($RepoUrl)"
+    }
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "creatine_install_$([guid]::NewGuid().ToString('N'))"
+    $tempZip = "$tempDir.zip"
+    $archiveError = $null
     try {
-        Invoke-WebRequest -Uri "https://github.com/reaperblitz/Creatine-AI/archive/refs/heads/main.zip" -OutFile $tempZip -UseBasicParsing
-        Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
-        
-        $extractedFolder = Get-ChildItem -Path $tempExtract -Directory | Select-Object -First 1
-        if (Test-Path $APP_DIR) { Remove-Item -Path $APP_DIR -Recurse -Force }
-        Move-Item -Path $extractedFolder.FullName -Destination $APP_DIR -Force
+        New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+        $downloadArgs = @{ Uri = "$($RepoUrl.TrimEnd('/'))/archive/HEAD.zip"; OutFile = $tempZip }
+        if ($IsWindowsPowerShell) { $downloadArgs["UseBasicParsing"] = $true }
+        Invoke-WebRequest @downloadArgs
+        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+        $extracted = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
+        if (-not $extracted) {
+            $archiveError = "the archive did not contain a source directory"
+        } else {
+            if (Test-Path $AppDir) {
+                Remove-Item -Path $AppDir -Recurse -Force
+            }
+            Move-Item -Path $extracted.FullName -Destination $AppDir -Force
+        }
+    } catch {
+        $archiveError = $_.Exception.Message
     } finally {
         Remove-Item -Path $tempZip -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($archiveError) {
+        Stop-WithError "Failed to download the repository archive: $archiveError"
     }
 }
 
-# 3. Install Dependencies & Build with Bun
-Write-Host "${ORANGE}Installing dependencies with bun...${NC}"
-Push-Location $APP_DIR
+if (-not (Test-Path (Join-Path $PackageDir $EntryPoint))) {
+    Stop-WithError "Expected $PackageDir\$EntryPoint to exist. The repository layout changed, so this installer needs to be updated."
+}
+
+# 4. Install Dependencies with Bun
+Write-Info "Installing dependencies with bun..."
+Push-Location $AppDir
 try {
-    bun install --silent
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "${RED}Failed to run 'bun install'${NC}"
-        exit 1
-    }
-
-    # 4. Build Binary or Setup Executable Wrapper
-    $entryPoint = "src/index.ts"
-    if (-not (Test-Path $entryPoint)) { $entryPoint = "index.ts" }
-
-    if (Test-Path $entryPoint) {
-        Write-Host "${ORANGE}Compiling binary with bun...${NC}"
-        bun build --compile --minify $entryPoint --outfile "$BIN_DIR\creatine.exe"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "${RED}Failed to compile binary with bun build${NC}"
-            exit 1
+    # HUSKY=0 keeps the git hooks of the checkout untouched (and avoids a failure
+    # when the sources came from the archive instead of git).
+    $env:HUSKY = "0"
+    if ((Invoke-Native -File bun -Arguments @("install")) -ne 0) {
+        Write-Info "Retrying install with the minimum release age guard disabled..."
+        if ((Invoke-Native -File bun -Arguments @("install", "--minimum-release-age=0")) -ne 0) {
+            Stop-WithError "Failed to run 'bun install' in $AppDir. If a native module failed to build, install the Visual Studio Build Tools ('Desktop development with C++') and run this script again."
         }
-    } else {
-        $wrapperPath = Join-Path $BIN_DIR "creatine.cmd"
-        "@echo off`r`nbun run `"$APP_DIR\$entryPoint`" %*" | Out-File -FilePath $wrapperPath -Encoding ascii
     }
 } finally {
     Pop-Location
 }
 
-# 5. Add ~/.creatine/bin to User PATH
-if (-not $NoModifyPath) {
+# 5. Write the launcher into ~/.creatine/bin
+Write-Info "Writing launcher to $Launcher..."
+$launcherScript = @"
+@echo off
+REM Generated by install.ps1. Runs the Creatine CLI from ~/.creatine/app with bun.
+bun run --cwd "$PackageDir" "$EntryPoint" %*
+exit /b %ERRORLEVEL%
+"@
+Set-Content -Path $Launcher -Value $launcherScript -Encoding ascii
+
+# 6. Verify the launcher before touching PATH
+Write-Info "Verifying installation..."
+$previous = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$versionRaw = & $Launcher --version 2>&1
+$versionExitCode = $LASTEXITCODE
+$ErrorActionPreference = $previous
+$versionOutput = ($versionRaw | Out-String).Trim()
+if ($versionExitCode -ne 0) {
+    Write-Host "${RED}Verification failed. '$Launcher --version' printed:${NC}"
+    Write-Host $versionOutput
+    Stop-WithError "PATH was left unchanged. Fix the errors above and run '$Launcher --version' manually."
+}
+
+# 7. Add ~/.creatine/bin to the User PATH
+$normalizedBin = $BinDir.TrimEnd('\')
+$manualStep = "  Add it manually: `$env:Path = `"$BinDir;`$env:Path`""
+
+if ($NoModifyPath) {
+    Write-Detail "Skipping PATH modification (-NoModifyPath)."
+    Write-Host $manualStep
+} else {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $normalizedBin = $BIN_DIR.TrimEnd('\')
-    
-    # Check PATH flexible to trailing slashes
-    $alreadyInPath = ($userPath -split ';') | Where-Object { $_.TrimEnd('\') -eq $normalizedBin }
-    
-    if (-not $alreadyInPath) {
-        $newPath = "$userPath;$BIN_DIR"
-        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        $env:Path = "$env:Path;$BIN_DIR"
-        Write-Host "${MUTED}Successfully added ${NC}creatine ${MUTED}to User `$PATH${NC}"
+    $userEntries = @()
+    if ($userPath) { $userEntries = @($userPath -split ';' | Where-Object { $_ -ne '' }) }
+    $alreadyInPath = $userEntries | Where-Object { $_.Trim().TrimEnd('\') -ieq $normalizedBin }
+
+    if ($alreadyInPath) {
+        Write-Detail "Directory already in User PATH, skipping."
     } else {
-        Write-Host "Directory already in User PATH, skipping."
+        $newUserPath = (@($userEntries) + $BinDir) -join ';'
+        [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
+        if ([Environment]::GetEnvironmentVariable("Path", "User") -ne $newUserPath) {
+            Write-Info "Could not update the user PATH."
+            Write-Host $manualStep
+        } else {
+            Write-Detail "Added $BinDir to User `$PATH"
+        }
+    }
+
+    # Make `creatine` usable without restarting the current session.
+    $processEntries = @($env:Path -split ';' | Where-Object { $_ -ne '' })
+    if (-not ($processEntries | Where-Object { $_.Trim().TrimEnd('\') -ieq $normalizedBin })) {
+        $env:Path = (@($processEntries) + $BinDir) -join ';'
     }
 }
 
-# Display Success Message
+# 8. Display Success Message
 Write-Host ""
-Write-Host "${MUTED}${NC}        ▄     "
+Write-Host "${MUTED}                    ${NC}         ▄     "
 Write-Host "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"
 Write-Host "${MUTED}█    █ ▀▀ █▀▀  █▀▀█ ${NC}█   █   █  █ █▀▀ "
 Write-Host "${MUTED}▀▄▄▄ ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀   ▀▀▀ ▀  ▀ ▀▀▀▀"
 Write-Host ""
 Write-Host "${MUTED}Creatine installed successfully from source!${NC}"
 Write-Host ""
-Write-Host "cd <project>  ${MUTED}# Open project directory${NC}"
-Write-Host "creatine      ${MUTED}# Run command${NC}"
+Write-Host "  source   ${MUTED}$AppDir${NC}"
+Write-Host "  launcher ${MUTED}$Launcher${NC}"
+Write-Host "  version  ${MUTED}$versionOutput${NC}"
+Write-Host ""
+Write-Host "  ${MUTED}Restart your terminal so $AppName picks up the new PATH.${NC}"
+Write-Host ""
+Write-Host "  ${MUTED}cd <project>${NC}     ${MUTED}# Open project directory${NC}"
+Write-Host "  ${MUTED}$AppName${NC}          ${MUTED}# Run command${NC}"
+Write-Host "  ${MUTED}$AppName --version${NC}  ${MUTED}# Check the installation${NC}"
+Write-Host ""
+Write-Host "  ${MUTED}Re-run this script to update. To uninstall:${NC}"
+Write-Host "  ${MUTED}Remove-Item -Recurse -Force '$CreatineHome'${NC}"
 Write-Host ""

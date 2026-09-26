@@ -1,42 +1,72 @@
 #!/usr/bin/env bash
+#
+# Creatine installer.
+#
+# Installs the CLI from the GitHub repository into ~/.creatine:
+#   1. clone (or update) the repository into ~/.creatine/app
+#   2. install its dependencies and run it with bun
+#   3. write a `creatine` launcher into ~/.creatine/bin
+#   4. add ~/.creatine/bin to PATH
+#   5. print the success message
+#
+# Examples:
+#   curl -fsSL https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.sh | bash -s -- --no-modify-path
+#
 set -euo pipefail
 
-APP=creatine
+APP_NAME="creatine"
+REPO_URL="${CREATINE_REPO_URL:-https://github.com/reaperblitz/Creatine-AI.git}"
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
 NC='\033[0m' # No Color
 
+info() { echo -e "${ORANGE}$1${NC}"; }
+detail() { echo -e "${MUTED}$1${NC}"; }
+fail() {
+    echo -e "${RED}$1${NC}" >&2
+    exit 1
+}
+
 usage() {
     cat <<EOF
-Creatine Installer (Bun Source Mode)
+Creatine Installer (bun source install)
+
+Clones the repository into ~/.creatine/app, installs its dependencies with bun,
+writes a '${APP_NAME}' launcher into ~/.creatine/bin and adds it to PATH.
 
 Usage: install.sh [options]
 
 Options:
     -h, --help          Display this help message
-    --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
+    --no-modify-path    Don't modify shell config files, only print the steps
+
+Environment:
+    CREATINE_REPO_URL   Repository to install from (default: ${REPO_URL})
 
 Examples:
-    curl -fsSL https://creatine.puter.site/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.sh | bash
 EOF
 }
 
-no_modify_path=false
+modify_path=true
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help)
             usage
             exit 0
             ;;
         --no-modify-path)
-            no_modify_path=true
+            modify_path=false
             shift
             ;;
         *)
-            shift
+            echo -e "${RED}Unknown option: $1${NC}" >&2
+            usage >&2
+            exit 1
             ;;
     esac
 done
@@ -48,133 +78,154 @@ if ! command -v bun >/dev/null 2>&1; then
     exit 1
 fi
 
-# Set up installation paths
+# 2. Set up installation paths
 CREATINE_HOME="$HOME/.creatine"
 APP_DIR="$CREATINE_HOME/app"
 BIN_DIR="$CREATINE_HOME/bin"
+PKG_DIR="$APP_DIR/packages/opencode"
+ENTRY_POINT="src/index.ts"
+LAUNCHER="$BIN_DIR/$APP_NAME"
 
 mkdir -p "$BIN_DIR"
 
-echo -e "\n${MUTED}Installing ${NC}creatine ${MUTED}from source using Bun...${NC}"
+echo -e "\n${MUTED}Installing ${NC}${APP_NAME} ${MUTED}from source using Bun...${NC}"
 
-# 2. Download or Clone Source Code into ~/.creatine/app
-if command -v git >/dev/null 2>&1; then
-    if [ -d "$APP_DIR/.git" ]; then
-        echo -e "${ORANGE}Updating existing source repository...${NC}"
-        git -C "$APP_DIR" pull --quiet
-    else
-        echo -e "${ORANGE}Cloning GitHub repository...${NC}"
+# 3. Download or Clone Source Code into ~/.creatine/app
+if [ -d "$APP_DIR/.git" ]; then
+    info "Updating existing source repository..."
+    git -C "$APP_DIR" pull --ff-only --quiet || fail "Failed to update $APP_DIR. Delete it and run this script again: rm -rf \"$APP_DIR\""
+elif command -v git >/dev/null 2>&1; then
+    if [ -e "$APP_DIR" ]; then
+        info "Removing existing directory that is not a git checkout..."
         rm -rf "$APP_DIR"
-        git clone --quiet https://github.com/reaperblitz/Creatine-AI.git "$APP_DIR"
     fi
+    info "Cloning GitHub repository..."
+    git clone --quiet --depth 1 "$REPO_URL" "$APP_DIR" || fail "Failed to clone $REPO_URL"
 else
-    echo -e "${ORANGE}Git not found. Downloading repository archive...${NC}"
+    info "Git not found. Downloading repository archive..."
+    if ! command -v curl >/dev/null 2>&1; then
+        fail "Git or curl is required to install Creatine."
+    fi
+    case "${REPO_URL%.git}" in
+        https://github.com/*) ;;
+        *) fail "Git is required to install from a non GitHub repository ($REPO_URL)" ;;
+    esac
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "$tmp_dir"' EXIT
-
-    curl -fsSL "https://github.com/reaperblitz/Creatine-AI/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp_dir"
-    extracted_folder=$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)
-
-    rm -rf "$APP_DIR"
-    mkdir -p "$CREATINE_HOME"
-    mv "$extracted_folder" "$APP_DIR"
+    curl -fsSL "${REPO_URL%.git}/archive/HEAD.tar.gz" | tar -xz -C "$tmp_dir" --strip-components=1 || fail "Failed to download the repository archive"
+    if [ -e "$APP_DIR" ]; then
+        rm -rf "$APP_DIR"
+    fi
+    mkdir -p "$APP_DIR"
+    cp -R "$tmp_dir/." "$APP_DIR/"
 fi
 
-# 3. Install Dependencies & Build Binary
-echo -e "${ORANGE}Installing dependencies with bun...${NC}"
+if [ ! -f "$PKG_DIR/$ENTRY_POINT" ]; then
+    fail "Expected $PKG_DIR/$ENTRY_POINT to exist. The repository layout changed, so this installer needs to be updated."
+fi
+
+# 4. Install Dependencies with Bun
+info "Installing dependencies with bun..."
 cd "$APP_DIR"
-bun install --silent
-
-entry_point=""
-if [ -f "src/index.ts" ]; then
-    entry_point="src/index.ts"
-elif [ -f "index.ts" ]; then
-    entry_point="index.ts"
-elif [ -f "src/cli.ts" ]; then
-    entry_point="src/cli.ts"
+# HUSKY=0 keeps the git hooks of the checkout untouched (and avoids a failure
+# when the sources came from the archive instead of git).
+if ! HUSKY=0 bun install; then
+    info "Retrying install with the minimum release age guard disabled..."
+    HUSKY=0 bun install --minimum-release-age=0 || fail "Failed to run 'bun install' in $APP_DIR. If a native module failed to build, install a C/C++ toolchain (python3, make, g++) and run this script again."
 fi
 
-if [ -n "$entry_point" ]; then
-    echo -e "${ORANGE}Compiling binary with bun...${NC}"
-    bun build --compile --minify "$entry_point" --outfile "$BIN_DIR/creatine"
-    chmod 755 "$BIN_DIR/creatine"
-else
-    echo -e "${ORANGE}Creating wrapper script...${NC}"
-    cat <<'EOF' > "$BIN_DIR/creatine"
+# 5. Write the launcher into ~/.creatine/bin
+info "Writing launcher to $LAUNCHER..."
+cat > "$LAUNCHER" <<EOF
 #!/usr/bin/env bash
-bun run "$HOME/.creatine/app/src/index.ts" "$@"
+# Generated by install.sh. Runs the Creatine CLI from ~/.creatine/app with bun.
+exec bun run --cwd "$PKG_DIR" "$ENTRY_POINT" "\$@"
 EOF
-    chmod 755 "$BIN_DIR/creatine"
+chmod 755 "$LAUNCHER"
+
+# 6. Verify the launcher before touching PATH
+info "Verifying installation..."
+if ! version_output="$("$LAUNCHER" --version 2>&1)"; then
+    echo -e "${RED}Verification failed. '$LAUNCHER --version' printed:${NC}" >&2
+    echo "$version_output" >&2
+    fail "PATH was left unchanged. Fix the errors above and run '$LAUNCHER --version' manually."
 fi
 
-# 4. Add ~/.creatine/bin to User Shell PATH
+# 7. Add ~/.creatine/bin to the shell PATH
 add_to_path() {
     local config_file=$1
-    local command=$2
+    local line=$2
 
-    if grep -Fxq "$command" "$config_file" 2>/dev/null; then
-        echo -e "${MUTED}Directory already in $config_file, skipping.${NC}"
-    elif [[ -w $config_file ]]; then
-        echo -e "\n# creatine" >> "$config_file"
-        echo "$command" >> "$config_file"
-        echo -e "${MUTED}Successfully added ${NC}creatine ${MUTED}to \$PATH in ${NC}$config_file"
-    else
-        echo -e "${ORANGE}Manually add the directory to $config_file:${NC}"
-        echo -e "  $command"
+    if grep -Fqx "$line" "$config_file" 2>/dev/null; then
+        detail "$config_file already adds $BIN_DIR to PATH."
+        return 0
     fi
+    if [ -e "$config_file" ] && [ ! -w "$config_file" ]; then
+        info "Cannot write to $config_file. Add the directory manually:"
+        echo "  $line"
+        return 0
+    fi
+    mkdir -p "$(dirname "$config_file")"
+    printf '\n# creatine\n%s\n' "$line" >> "$config_file"
+    detail "Added $BIN_DIR to PATH in $config_file"
 }
 
-if [[ "$no_modify_path" != "true" ]]; then
-    XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
-    current_shell=$(basename "${SHELL:-bash}")
-
-    case $current_shell in
-        fish)
-            config_files="$HOME/.config/fish/config.fish"
-        ;;
-        zsh)
-            config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc"
-        ;;
-        bash)
-            config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc"
-        ;;
-        ash|sh)
-            config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
-        ;;
-        *)
-            config_files="$HOME/.bashrc $HOME/.bash_profile"
-        ;;
-    esac
-
-    config_file=""
-    for file in $config_files; do
-        if [[ -f $file ]]; then
-            config_file=$file
-            break
+if [ "$modify_path" = true ]; then
+    xdg_config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+    current_shell=$(basename "${SHELL:-}")
+    if [ -z "$current_shell" ]; then
+        if [ -n "${FISH_VERSION:-}" ]; then
+            current_shell="fish"
+        elif [ -n "${ZSH_VERSION:-}" ]; then
+            current_shell="zsh"
+        else
+            current_shell="bash"
         fi
-    done
-
-    if [[ -z $config_file ]]; then
-        echo -e "${ORANGE}No config file found for $current_shell. Manually add to PATH:${NC}"
-        echo -e "  export PATH=\"$BIN_DIR:\$PATH\""
-    elif [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-        case $current_shell in
-            fish)
-                add_to_path "$config_file" "fish_add_path $BIN_DIR"
-            ;;
-            *)
-                add_to_path "$config_file" "export PATH=\"$BIN_DIR:\$PATH\""
-            ;;
-        esac
     fi
+
+    if [ "$current_shell" = "csh" ] || [ "$current_shell" = "tcsh" ]; then
+        info "Cannot update the config of $current_shell automatically. Add the directory manually:"
+        echo "  setenv PATH \"$BIN_DIR:\$PATH\""
+    else
+        case "$current_shell" in
+            fish)
+                config_files=("$xdg_config_home/fish/config.fish")
+                ;;
+            zsh)
+                config_files=("$HOME/.zshrc" "${ZDOTDIR:-$HOME}/.zshenv" "$xdg_config_home/zsh/.zshrc")
+                ;;
+            bash)
+                config_files=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$xdg_config_home/bash/.bashrc")
+                ;;
+            ash|sh|dash)
+                config_files=("$HOME/.profile" "$HOME/.ashrc")
+                ;;
+            *)
+                config_files=("$HOME/.bashrc" "$HOME/.profile")
+                ;;
+        esac
+
+        # Fall back to the primary config file of the shell when none exist yet.
+        config_file="${config_files[0]}"
+        for file in "${config_files[@]}"; do
+            if [ -f "$file" ]; then
+                config_file="$file"
+                break
+            fi
+        done
+
+        if [ "$current_shell" = "fish" ]; then
+            add_to_path "$config_file" "fish_add_path \"$BIN_DIR\""
+        else
+            add_to_path "$config_file" "export PATH=\"$BIN_DIR:\$PATH\""
+        fi
+    fi
+else
+    detail "Skipping PATH modification (--no-modify-path)."
+    echo -e "  Add it manually: ${ORANGE}export PATH=\"$BIN_DIR:\$PATH\"${NC}"
 fi
 
-if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
-    echo "$BIN_DIR" >> "$GITHUB_PATH"
-    echo -e "${MUTED}Added $BIN_DIR to \$GITHUB_PATH${NC}"
-fi
-
-# Display Success ASCII & Output
+# 8. Display Success Message
 echo -e ""
 echo -e "${MUTED}                    ${NC}         ▄     "
 echo -e "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"
@@ -183,6 +234,16 @@ echo -e "${MUTED}▀▄▄▄ ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀   ▀▀
 echo -e ""
 echo -e "${MUTED}Creatine installed successfully from source!${NC}"
 echo -e ""
-echo -e "cd <project>  ${MUTED}# Open project directory${NC}"
-echo -e "creatine      ${MUTED}# Run command${NC}"
+echo -e "  source   ${MUTED}$APP_DIR${NC}"
+echo -e "  launcher ${MUTED}$LAUNCHER${NC}"
+echo -e "  version  ${MUTED}$version_output${NC}"
+echo -e ""
+echo -e "  ${MUTED}Restart your terminal so ${APP_NAME} picks up the new PATH.${NC}"
+echo -e ""
+echo -e "  ${MUTED}cd <project>${NC}     ${MUTED}# Open project directory${NC}"
+echo -e "  ${MUTED}${APP_NAME}${NC}          ${MUTED}# Run command${NC}"
+echo -e "  ${MUTED}${APP_NAME} --version${NC}  ${MUTED}# Check the installation${NC}"
+echo -e ""
+echo -e "  ${MUTED}Re-run this script to update. To uninstall:${NC}"
+echo -e "  ${MUTED}rm -rf \"$CREATINE_HOME\"${NC}"
 echo -e ""
