@@ -19,7 +19,7 @@ Options:
     -NoModifyPath    Don't modify system/user PATH environment variable
 
 Examples:
-    irm https://creatine.puter.site/install.ps1 | iex
+    irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1 | iex
 "@
     exit 0
 }
@@ -38,7 +38,7 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-# Set up installation paths
+# Set up installation paths (Fixed missing spaces after Join-Path)
 $CREATINE_HOME = Join-Path$env:USERPROFILE ".creatine"
 $APP_DIR       = Join-Path$CREATINE_HOME "app"
 $BIN_DIR       = Join-Path$CREATINE_HOME "bin"
@@ -74,7 +74,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     }
 }
 
-# 3. Install Dependencies with Bun
+# 3. Install Dependencies & Build with Bun
 Write-Host "${ORANGE}Installing dependencies with bun...${NC}"
 Push-Location $APP_DIR
 try {
@@ -85,15 +85,17 @@ try {
     }
 
     # 4. Build Binary or Setup Executable Wrapper
-    # Option A: Compile standalone single-file .exe (Preferred if index.ts/cli.ts exists)
     $entryPoint = "src/index.ts"
     if (-not (Test-Path $entryPoint)) { $entryPoint = "index.ts" }
 
     if (Test-Path $entryPoint) {
         Write-Host "${ORANGE}Compiling binary with bun...${NC}"
         bun build --compile --minify $entryPoint --outfile "$BIN_DIR\creatine.exe"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "${RED}Failed to compile binary with bun build${NC}"
+            exit 1
+        }
     } else {
-        # Option B: Fallback CMD wrapper script if compilation isn't used
         $wrapperPath = Join-Path $BIN_DIR "creatine.cmd"
         "@echo off`r`nbun run `"$APP_DIR\$entryPoint`" %*" | Out-File -FilePath $wrapperPath -Encoding ascii
     }
@@ -104,8 +106,12 @@ try {
 # 5. Add ~/.creatine/bin to User PATH
 if (-not $NoModifyPath) {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $pathParts = $userPath -split ';'
-    if ($pathParts -notcontains $BIN_DIR) {
+    $normalizedBin = $BIN_DIR.TrimEnd('\')
+    
+    # Check PATH flexible to trailing slashes
+    $alreadyInPath = ($userPath -split ';') | Where-Object { $_.TrimEnd('\') -eq $normalizedBin }
+    
+    if (-not $alreadyInPath) {
         $newPath = "$userPath;$BIN_DIR"
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
         $env:Path = "$env:Path;$BIN_DIR"
@@ -115,9 +121,9 @@ if (-not $NoModifyPath) {
     }
 }
 
-# Display Success ASCII & Output
+# Display Success Message
 Write-Host ""
-Write-Host "${MUTED}${NC}         ▄     "
+Write-Host "${MUTED}${NC}        ▄     "
 Write-Host "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"
 Write-Host "${MUTED}█    █ ▀▀ █▀▀  █▀▀█ ${NC}█   █   █  █ █▀▀ "
 Write-Host "${MUTED}▀▄▄▄ ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀   ▀▀▀ ▀  ▀ ▀▀▀▀"
