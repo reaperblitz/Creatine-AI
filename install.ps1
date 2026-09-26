@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Creatine installer (bun source install).
 
@@ -9,6 +9,12 @@
       3. write a "creatine" launcher into ~/.creatine/bin
       4. add ~/.creatine/bin to PATH
       5. print the success message
+
+.NOTES
+    This file must stay pure ASCII and must not have a byte order mark.
+    Windows PowerShell 5.1 decodes a file without a BOM as ANSI, which mangles
+    the logo, while "irm ... | iex" keeps a BOM as a leading character and then
+    fails to parse. The logo below is therefore written with \u escapes.
 
 .EXAMPLE
     irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1 | iex
@@ -31,11 +37,14 @@ if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction Sile
     $PSNativeCommandUseErrorActionPreference = $false
 }
 
+# `exit` inside "irm ... | iex" closes the session it was pasted into, so only
+# exit when this script runs from a file or with arguments.
+$Inline = [string]::IsNullOrEmpty($MyInvocation.InvocationName)
+
 $AppName = 'creatine'
 $RepoUrl = if ($env:CREATINE_REPO_URL) { $env:CREATINE_REPO_URL } else { 'https://github.com/reaperblitz/Creatine-AI.git' }
 
-# Windows PowerShell 5.1 neither interprets ANSI escapes nor needs the
-# -UseBasicParsing workaround of Invoke-WebRequest.
+# Windows PowerShell 5.1 does not interpret ANSI escapes in Write-Host output.
 $IsWindowsPowerShell = $PSVersionTable.PSVersion.Major -lt 6
 $e = [char]27
 $MUTED = if ($IsWindowsPowerShell) { '' } else { "$e[0;2m" }
@@ -43,11 +52,20 @@ $RED = if ($IsWindowsPowerShell) { '' } else { "$e[0;31m" }
 $ORANGE = if ($IsWindowsPowerShell) { '' } else { "$e[38;5;214m" }
 $NC = if ($IsWindowsPowerShell) { '' } else { "$e[0m" }
 
+# \u2588 full block, \u2580 upper half block, \u2584 lower half block.
+$Logo = @"
+                             \u2584
+\u2584\u2584\u2584\u2588 \u2588\u2580\u2580\u2588 \u2588\u2580\u2580\u2580 \u2588\u2580\u2580\u2588 \u2580\u2588\u2580 \u2580\u2588\u2580 \u2588\u2580\u2580\u2584 \u2588\u2580\u2580\u2580
+\u2588    \u2588 \u2580\u2580 \u2588\u2580\u2580  \u2588\u2580\u2580\u2588 \u2588   \u2588   \u2588  \u2588 \u2588\u2580\u2580
+\u2580\u2584\u2584\u2584 \u2580 \u2580\u2580 \u2580\u2580\u2580\u2580 \u2580  \u2580 \u2580   \u2580\u2580\u2580 \u2580  \u2580 \u2580\u2580\u2580\u2580
+"@ -split "`n" | ForEach-Object { [regex]::Unescape($_.TrimEnd("`r", " ")) } | Where-Object { $_ }
+
 function Write-Info { param([string]$Message) Write-Host "${ORANGE}$Message${NC}" }
 function Write-Detail { param([string]$Message) Write-Host "${MUTED}$Message${NC}" }
 function Stop-WithError {
     param([string]$Message)
     Write-Host "${RED}$Message${NC}"
+    if ($Inline) { throw $Message }
     exit 1
 }
 function Invoke-Native {
@@ -91,13 +109,14 @@ To pass options, run the script block instead of piping it into iex:
     `$installer = irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1
     & ([scriptblock]::Create(`$installer)) -NoModifyPath
 "@
-    exit 0
+    return
 }
 
 # 1. Check for Bun Requirement
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
     Write-Host "${RED}Error: Bun is required to install Creatine from source.${NC}"
     Write-Host "Please install Bun first: ${ORANGE}powershell -c `"irm bun.sh/install.ps1 | iex`"${NC}"
+    if ($Inline) { return }
     exit 1
 }
 
@@ -242,10 +261,7 @@ if ($NoModifyPath) {
 
 # 8. Display Success Message
 Write-Host ""
-Write-Host "${MUTED}                    ${NC}         ▄     "
-Write-Host "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"
-Write-Host "${MUTED}█    █ ▀▀ █▀▀  █▀▀█ ${NC}█   █   █  █ █▀▀ "
-Write-Host "${MUTED}▀▄▄▄ ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀   ▀▀▀ ▀  ▀ ▀▀▀▀"
+$Logo | ForEach-Object { Write-Host "${MUTED}$_${NC}" }
 Write-Host ""
 Write-Host "${MUTED}Creatine installed successfully from source!${NC}"
 Write-Host ""
