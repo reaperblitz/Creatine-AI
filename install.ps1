@@ -135,7 +135,13 @@ Write-Host "`n${MUTED}Installing ${NC}$AppName ${MUTED}from source using Bun...$
 # 3. Download or Clone Source Code into ~/.creatine/app
 if (Test-Path (Join-Path $AppDir ".git")) {
     Write-Info "Updating existing source repository..."
-    if ((Invoke-Native -File git -Arguments @("-C", $AppDir, "pull", "--ff-only", "--quiet")) -ne 0) {
+    # "bun install" rewrites bun.lock in the checkout, and a rebase configured for
+    # the branch makes "git pull" refuse those changes. Sync to the remote tip
+    # instead, which keeps this script re-runnable.
+    if ((Invoke-Native -File git -Arguments @("-C", $AppDir, "fetch", "--quiet", "--depth", "1", "origin")) -ne 0) {
+        Stop-WithError "Failed to fetch $RepoUrl"
+    }
+    if ((Invoke-Native -File git -Arguments @("-C", $AppDir, "reset", "--quiet", "--hard", "FETCH_HEAD")) -ne 0) {
         Stop-WithError "Failed to update $AppDir. Delete it and run this script again: Remove-Item -Recurse -Force '$AppDir'"
     }
 } elseif (Get-Command git -ErrorAction SilentlyContinue) {

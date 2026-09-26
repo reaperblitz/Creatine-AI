@@ -93,7 +93,11 @@ echo -e "\n${MUTED}Installing ${NC}${APP_NAME} ${MUTED}from source using Bun...$
 # 3. Download or Clone Source Code into ~/.creatine/app
 if [ -d "$APP_DIR/.git" ]; then
     info "Updating existing source repository..."
-    git -C "$APP_DIR" pull --ff-only --quiet || fail "Failed to update $APP_DIR. Delete it and run this script again: rm -rf \"$APP_DIR\""
+    # "bun install" rewrites bun.lock in the checkout, and a rebase configured for
+    # the branch makes "git pull" refuse those changes. Sync to the remote tip
+    # instead, which keeps this script re-runnable.
+    git -C "$APP_DIR" fetch --quiet --depth 1 origin || fail "Failed to fetch $REPO_URL"
+    git -C "$APP_DIR" reset --quiet --hard FETCH_HEAD || fail "Failed to update $APP_DIR. Delete it and run this script again: rm -rf \"$APP_DIR\""
 elif command -v git >/dev/null 2>&1; then
     if [ -e "$APP_DIR" ]; then
         info "Removing existing directory that is not a git checkout..."
