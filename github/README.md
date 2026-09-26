@@ -1,6 +1,6 @@
 # creatine GitHub Action
 
-A GitHub Action that integrates [creatine](https://opencode.ai) directly into your GitHub workflow.
+A GitHub Action that integrates [creatine](https://creatine.puter.site) directly into your GitHub workflow.
 
 Mention `/creatine` in your comment, and creatine will execute tasks within your GitHub Actions runner.
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 APP=creatine
 
 MUTED='\033[0;2m'
@@ -20,9 +21,9 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/install | bash
-    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
-    ./install --binary /path/to/creatine
+    curl -fsSL https://creatine.puter.site/install.sh | bash
+    curl -fsSL https://creatine.puter.site/install.sh | bash -s -- --version 1.0.180
+    ./install.sh --binary /path/to/creatine
 EOF
 }
 
@@ -65,10 +66,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR=$HOME/.creatine/bin
+INSTALL_DIR="$HOME/.creatine/bin"
 mkdir -p "$INSTALL_DIR"
 
-# If --binary is provided, skip all download/detection logic
+# If --binary is provided, skip download and architecture detection
 if [ -n "$binary_path" ]; then
     if [ ! -f "$binary_path" ]; then
         echo -e "${RED}Error: Binary not found at ${binary_path}${NC}"
@@ -79,99 +80,98 @@ else
     raw_os=$(uname -s)
     os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
     case "$raw_os" in
-      Darwin*) os="darwin" ;;
-      Linux*) os="linux" ;;
-      MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+        Darwin*) os="darwin" ;;
+        Linux*) os="linux" ;;
+        MINGW*|MSYS*|CYGWIN*) os="windows" ;;
     esac
 
     arch=$(uname -m)
     if [[ "$arch" == "aarch64" ]]; then
-      arch="arm64"
+        arch="arm64"
     fi
     if [[ "$arch" == "x86_64" ]]; then
-      arch="x64"
+        arch="x64"
     fi
 
     if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
-      rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
-      if [ "$rosetta_flag" = "1" ]; then
-        arch="arm64"
-      fi
+        rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+        if [ "$rosetta_flag" = "1" ]; then
+            arch="arm64"
+        fi
     fi
 
     combo="$os-$arch"
     case "$combo" in
-      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
-        ;;
-      *)
-        echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
-        exit 1
-        ;;
+        linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+            ;;
+        *)
+            echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
+            exit 1
+            ;;
     esac
 
     archive_ext=".zip"
     if [ "$os" = "linux" ]; then
-      archive_ext=".tar.gz"
+        archive_ext=".tar.gz"
     fi
 
     is_musl=false
     if [ "$os" = "linux" ]; then
-      if [ -f /etc/alpine-release ]; then
-        is_musl=true
-      fi
-
-      if command -v ldd >/dev/null 2>&1; then
-        if ldd --version 2>&1 | grep -qi musl; then
-          is_musl=true
+        if [ -f /etc/alpine-release ]; then
+            is_musl=true
         fi
-      fi
+
+        if command -v ldd >/dev/null 2>&1; then
+            if ldd --version 2>&1 | grep -qi musl; then
+                is_musl=true
+            fi
+        fi
     fi
 
     needs_baseline=false
     if [ "$arch" = "x64" ]; then
-      if [ "$os" = "linux" ]; then
-        if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
-          needs_baseline=true
+        if [ "$os" = "linux" ]; then
+            if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
+                needs_baseline=true
+            fi
         fi
-      fi
 
-      if [ "$os" = "darwin" ]; then
-        avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
-        if [ "$avx2" != "1" ]; then
-          needs_baseline=true
+        if [ "$os" = "darwin" ]; then
+            avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
+            if [ "$avx2" != "1" ]; then
+                needs_baseline=true
+            fi
         fi
-      fi
 
-      if [ "$os" = "windows" ]; then
-        ps="(Add-Type -MemberDefinition \"[DllImport(\"\"kernel32.dll\"\")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);\" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)"
-        out=""
-        if command -v powershell.exe >/dev/null 2>&1; then
-          out=$(powershell.exe -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
-        elif command -v pwsh >/dev/null 2>&1; then
-          out=$(pwsh -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
+        if [ "$os" = "windows" ]; then
+            ps="(Add-Type -MemberDefinition \"[DllImport(\"\"kernel32.dll\"\")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);\" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)"
+            out=""
+            if command -v powershell.exe >/dev/null 2>&1; then
+                out=$(powershell.exe -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
+            elif command -v pwsh >/dev/null 2>&1; then
+                out=$(pwsh -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
+            fi
+            out=$(echo "$out" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+            if [ "$out" != "true" ] && [ "$out" != "1" ]; then
+                needs_baseline=true
+            fi
         fi
-        out=$(echo "$out" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-        if [ "$out" != "true" ] && [ "$out" != "1" ]; then
-          needs_baseline=true
-        fi
-      fi
     fi
 
     target="$os-$arch"
     if [ "$needs_baseline" = "true" ]; then
-      target="$target-baseline"
+        target="$target-baseline"
     fi
     if [ "$is_musl" = "true" ]; then
-      target="$target-musl"
+        target="$target-musl"
     fi
 
     filename="$APP-$target$archive_ext"
 
-
     if [ "$os" = "linux" ]; then
         if ! command -v tar >/dev/null 2>&1; then
-             echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
-             exit 1
+            echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
+            exit 1
         fi
     else
         if ! command -v unzip >/dev/null 2>&1; then
@@ -181,24 +181,22 @@ else
     fi
 
     if [ -z "$requested_version" ]; then
-        url="https://github.com/anomalyco/creatine/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/creatine/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        url="https://github.com/reaperblitz/Creatine-AI/releases/latest/download/$filename"
+        specific_version=$(curl -s https://api.github.com/repos/reaperblitz/Creatine-AI/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
-        if [[ $? -ne 0 || -z "$specific_version" ]]; then
+        if [[ -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
     else
-        # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/anomalyco/creatine/releases/download/v${requested_version}/$filename"
+        url="https://github.com/reaperblitz/Creatine-AI/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
 
-        # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/creatine/releases/tag/v${requested_version}")
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/reaperblitz/Creatine-AI/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/anomalyco/creatine/releases${NC}"
+            echo -e "${MUTED}Available releases: https://github.com/reaperblitz/Creatine-AI/releases${NC}"
             exit 1
         fi
     fi
@@ -220,15 +218,12 @@ print_message() {
 
 check_version() {
     if command -v creatine >/dev/null 2>&1; then
-        creatine_path=$(which creatine)
-
-        ## Check the installed version
         installed_version=$(creatine --version 2>/dev/null || echo "")
 
         if [[ "$installed_version" != "$specific_version" ]]; then
             print_message info "${MUTED}Installed version: ${NC}$installed_version."
         else
-            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
+            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed${NC}"
             exit 0
         fi
     fi
@@ -281,9 +276,7 @@ download_with_progress() {
     rm -f "$tracefile"
     mkfifo "$tracefile"
 
-    # Hide cursor
-    printf "\033[?25l" >&4
-
+    printf "\033[?25l" >&4 # Hide cursor
     trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
     (
@@ -330,7 +323,6 @@ download_and_install() {
     mkdir -p "$tmp_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
-        # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         curl -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
@@ -340,8 +332,20 @@ download_and_install() {
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
 
-    mv "$tmp_dir/creatine" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/creatine"
+    local bin_file
+    bin_file=$(find "$tmp_dir" -type f \( -name "creatine" -o -name "creatine.exe" \) | head -n 1)
+    if [ -z "$bin_file" ]; then
+        bin_file=$(find "$tmp_dir" -type f -name "creatine*" | head -n 1)
+    fi
+
+    if [ -n "$bin_file" ]; then
+        mv "$bin_file" "${INSTALL_DIR}/creatine"
+        chmod 755 "${INSTALL_DIR}/creatine"
+    else
+        echo -e "${RED}Error: Executable binary not found in archive${NC}"
+        exit 1
+    fi
+
     rm -rf "$tmp_dir"
 }
 
@@ -357,7 +361,6 @@ else
     check_version
     download_and_install
 fi
-
 
 add_to_path() {
     local config_file=$1
@@ -377,7 +380,7 @@ add_to_path() {
 
 XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 
-current_shell=$(basename "$SHELL")
+current_shell=$(basename "${SHELL:-bash}")
 case $current_shell in
     fish)
         config_files="$HOME/.config/fish/config.fish"
@@ -388,14 +391,10 @@ case $current_shell in
     bash)
         config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
     ;;
-    ash)
-        config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
-    ;;
-    sh)
+    ash|sh)
         config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
     ;;
     *)
-        # Default case if none of the above matches
         config_files="$HOME/.bashrc $HOME/.bash_profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
     ;;
 esac
@@ -417,44 +416,28 @@ if [[ "$no_modify_path" != "true" ]]; then
             fish)
                 add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
             ;;
-            zsh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            bash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            ash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            sh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
-            *)
-                export PATH=$INSTALL_DIR:$PATH
-                print_message warning "Manually add the directory to $config_file (or similar):"
-                print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+            zsh|bash|ash|sh|*)
+                add_to_path "$config_file" "export PATH=\"$INSTALL_DIR:\$PATH\""
             ;;
         esac
     fi
 fi
 
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
-    echo "$INSTALL_DIR" >> $GITHUB_PATH
+    echo "$INSTALL_DIR" >> "$GITHUB_PATH"
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
+echo -e "${MUTED}                    ${NC}         ▄     "
 echo -e "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"
-echo -e "${MUTED}█     █ ▀▀ █▀▀  █▀▀█ ${NC}█   █  █  █ █▀▀"
-echo -e "${MUTED}▀▄▄▄  ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀  ▀▀▀ ▀  ▀ ▀▀▀▀"
-echo -e ""
+echo -e "${MUTED}█    █ ▀▀ █▀▀  █▀▀█ ${NC}█   █   █  █ █▀▀ "
+echo -e "${MUTED}▀▄▄▄ ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀   ▀▀▀ ▀  ▀ ▀▀▀▀"
 echo -e ""
 echo -e "${MUTED}Creatine includes free models, to start:${NC}"
 echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "creatine      ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
-echo -e ""
+echo -e "${MUTED}For more information visit ${NC}https://creatine.puter.site"
 echo -e ""

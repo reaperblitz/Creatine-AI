@@ -1,10 +1,10 @@
 # creatine VS Code Extension
 
-A Visual Studio Code extension that integrates [creatine](https://opencode.ai) directly into your development workflow.
+A Visual Studio Code extension that integrates [creatine](https://creatine.puter.site) directly into your development workflow.
 
 ## Prerequisites
 
-This extension requires the [creatine CLI](https://opencode.ai) to be installed on your system. Visit [opencode.ai](https://opencode.ai) for installation instructions.
+This extension requires the [creatine CLI](https://creatine.puter.site) to be installed on your system. Visit [opencode.ai](https://creatine.puter.site) for installation instructions.
 
 ## Features
 

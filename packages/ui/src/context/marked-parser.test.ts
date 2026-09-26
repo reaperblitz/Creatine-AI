@@ -4,7 +4,7 @@ import { createMarkdownParser } from "./marked-parser"
 const parser = createMarkdownParser((code, language) => `<pre data-language="${language}">${code}</pre>`)
 
 test("renders links with application attributes", async () => {
-  expect(await parser.parse("[Creatine](https://opencode.ai)")).toBe(
+  expect(await parser.parse("[Creatine](https://creatine.puter.site)")).toBe(
     '<p><a href="https://opencode.ai" class="external-link" target="_blank" rel="noopener noreferrer">Creatine</a></p>\n',
   )
 })
