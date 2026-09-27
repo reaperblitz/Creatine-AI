@@ -64,6 +64,7 @@ import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { boardGameCommand, openTerminalWindow } from "./terminal-window"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig, type TuiConfig } from "./config"
 import { createTuiApiAdapters } from "./plugin/adapters"
@@ -822,6 +823,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         title: "Open docs",
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
+          dialog.clear()
+        },
+        category: "System",
+      },
+      {
+        name: "boardgame.open",
+        title: "Play a board game (chess, go)",
+        slashName: "boardgame",
+        slashAliases: ["chess", "go"],
+        run: () => {
+          openTerminalWindow(boardGameCommand())
+          toast.show({ variant: "info", message: "Board game opened in a new terminal window." })
           dialog.clear()
         },
         category: "System",
