@@ -1,4 +1,4 @@
-import type { CreatineEventEncoded } from "@opencode-ai/protocol/groups/event"
+import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"
 
 export type JsonValue =
   | null
@@ -2538,7 +2538,7 @@ export type SkillsListOutput = {
   }>
 }
 
-export type EventsSubscribeOutput = CreatineEventEncoded
+export type EventsSubscribeOutput = OpenCodeEventEncoded
 
 export type PtysListInput = {
   readonly location?: {
