@@ -8,13 +8,13 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 Der Creatine CLI startet standardmäßig das [TUI](/docs/tui), wenn er ohne Argumente ausgeführt wird.
 
 ```bash
-opencode
+creatine
 ```
 
 Es akzeptiert aber auch Befehle, wie auf dieser Seite dokumentiert. Dadurch können Sie programmgesteuert mit Creatine interagieren.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+creatine run "Explain how closures work in JavaScript"
 ```
 
 ---
@@ -24,7 +24,7 @@ opencode run "Explain how closures work in JavaScript"
 Starten Sie die Terminalbenutzeroberfläche Creatine.
 
 ```bash
-opencode [project]
+creatine [project]
 ```
 
 #### Optionen
@@ -53,7 +53,7 @@ Der Creatine CLI verfügt außerdem über die folgenden Befehle.
 Agenten für Creatine verwalten.
 
 ```bash
-opencode agent [command]
+creatine agent [command]
 ```
 
 ---
@@ -63,17 +63,17 @@ opencode agent [command]
 Schließen Sie ein Terminal an einen bereits laufenden Creatine-Backend-Server an, der über die Befehle `serve` oder `web` gestartet wurde.
 
 ```bash
-opencode attach [url]
+creatine attach [url]
 ```
 
 Dies ermöglicht die Verwendung von TUI mit einem Remote-Backend Creatine. Zum Beispiel:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+creatine web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+creatine attach http://10.20.30.40:4096
 ```
 
 #### Optionen
@@ -85,7 +85,7 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Session-ID zum Fortfahren                                                          |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen abzweigen (mit `--continue` oder `--session` verwenden)    |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `CREATINE_SERVER_PASSWORD`)                     |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `CREATINE_SERVER_USERNAME` oder `opencode`) |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `CREATINE_SERVER_USERNAME` oder `creatine`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 Erstellen Sie einen neuen Agenten mit benutzerdefinierter Konfiguration.
 
 ```bash
-opencode agent create
+creatine agent create
 ```
 
 Dieser Befehl führt Sie durch die Erstellung eines neuen Agenten mit einer benutzerdefinierten Systemeingabeaufforderung und Toolkonfiguration.
@@ -106,7 +106,7 @@ Dieser Befehl führt Sie durch die Erstellung eines neuen Agenten mit einer benu
 Listen Sie alle verfügbaren Agenten auf.
 
 ```bash
-opencode agent list
+creatine agent list
 ```
 
 ---
@@ -116,17 +116,17 @@ opencode agent list
 Befehl zum Verwalten von Anmeldeinformationen und Anmelden für Anbieter.
 
 ```bash
-opencode auth [command]
+creatine auth [command]
 ```
 
 ---
 
 #### login
 
-Creatine wird von der Anbieterliste bei [Models.dev](https://models.dev) unterstützt, sodass Sie `opencode auth login` verwenden können, um API-Schlüssel für jeden Anbieter zu konfigurieren, den Sie verwenden möchten. Dies wird in `~/.local/share/opencode/auth.json` gespeichert.
+Creatine wird von der Anbieterliste bei [Models.dev](https://models.dev) unterstützt, sodass Sie `creatine auth login` verwenden können, um API-Schlüssel für jeden Anbieter zu konfigurieren, den Sie verwenden möchten. Dies wird in `~/.local/share/creatine/auth.json` gespeichert.
 
 ```bash
-opencode auth login
+creatine auth login
 ```
 
 Wenn Creatine startet, lädt es den Anbieter aus der Anmeldeinformationsdatei. Und ob in Ihren Umgebungen Schlüssel sind oder in Ihrem Projekt eine `.env`-Datei vorhanden ist.
@@ -138,13 +138,13 @@ Wenn Creatine startet, lädt es den Anbieter aus der Anmeldeinformationsdatei. U
 Listet alle authentifizierten Anbieter auf, wie in der Anmeldeinformationsdatei gespeichert.
 
 ```bash
-opencode auth list
+creatine auth list
 ```
 
 Oder die Kurzversion.
 
 ```bash
-opencode auth ls
+creatine auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 Melden Sie sich von einem Anbieter ab, indem Sie ihn aus der Anmeldeinformationsdatei löschen.
 
 ```bash
-opencode auth logout
+creatine auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 Verwalten Sie den GitHub-Agenten für die Repository-Automatisierung.
 
 ```bash
-opencode github [command]
+creatine github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 Installieren Sie den GitHub-Agenten in Ihrem Repository.
 
 ```bash
-opencode github install
+creatine github install
 ```
 
 Dadurch wird der erforderliche GitHub-Aktionsworkflow eingerichtet und Sie durch den Konfigurationsprozess geführt. [Learn more](/docs/github).
@@ -186,7 +186,7 @@ Dadurch wird der erforderliche GitHub-Aktionsworkflow eingerichtet und Sie durch
 Führen Sie den GitHub-Agenten aus. Dies wird normalerweise in GitHub-Aktionen verwendet.
 
 ```bash
-opencode github run
+creatine github run
 ```
 
 ##### Optionen
@@ -203,7 +203,7 @@ opencode github run
 Verwalten Sie Model Context Protocol-Server.
 
 ```bash
-opencode mcp [command]
+creatine mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 Fügen Sie Ihrer Konfiguration einen MCP-Server hinzu.
 
 ```bash
-opencode mcp add
+creatine mcp add
 ```
 
 Dieser Befehl führt Sie durch das Hinzufügen eines lokalen oder Remote-MCP-Servers.
@@ -225,13 +225,13 @@ Dieser Befehl führt Sie durch das Hinzufügen eines lokalen oder Remote-MCP-Ser
 Listen Sie alle konfigurierten MCP-Server und deren Verbindungsstatus auf.
 
 ```bash
-opencode mcp list
+creatine mcp list
 ```
 
 Oder nutzen Sie die Kurzversion.
 
 ```bash
-opencode mcp ls
+creatine mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 Authentifizieren Sie sich mit einem OAuth-fähigen MCP-Server.
 
 ```bash
-opencode mcp auth [name]
+creatine mcp auth [name]
 ```
 
 Wenn Sie keinen Servernamen angeben, werden Sie aufgefordert, einen der verfügbaren OAuth-fähigen Server auszuwählen.
@@ -249,13 +249,13 @@ Wenn Sie keinen Servernamen angeben, werden Sie aufgefordert, einen der verfügb
 Sie können auch OAuth-fähige Server und deren Authentifizierungsstatus auflisten.
 
 ```bash
-opencode mcp auth list
+creatine mcp auth list
 ```
 
 Oder nutzen Sie die Kurzversion.
 
 ```bash
-opencode mcp auth ls
+creatine mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 Entfernen Sie OAuth-Anmeldeinformationen für einen MCP-Server.
 
 ```bash
-opencode mcp logout [name]
+creatine mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 Beheben Sie OAuth-Verbindungsprobleme für einen MCP-Server.
 
 ```bash
-opencode mcp debug <name>
+creatine mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 Listen Sie alle verfügbaren Modelle der konfigurierten Anbieter auf.
 
 ```bash
-opencode models [provider]
+creatine models [provider]
 ```
 
 Dieser Befehl zeigt alle bei Ihren konfigurierten Anbietern verfügbaren Modelle im Format `provider/model` an.
@@ -295,7 +295,7 @@ Dies ist nützlich, um die genauen Modellnamen herauszufinden, die in [Ihrer Kon
 Sie können optional eine Anbieter-ID übergeben, um Modelle nach diesem Anbieter zu filtern.
 
 ```bash
-opencode models anthropic
+creatine models anthropic
 ```
 
 #### Optionen
@@ -308,7 +308,7 @@ opencode models anthropic
 Verwenden Sie das Flag `--refresh`, um die zwischengespeicherte Modellliste zu aktualisieren. Dies ist nützlich, wenn einem Anbieter neue Modelle hinzugefügt wurden und Sie diese in Creatine sehen möchten.
 
 ```bash
-opencode models --refresh
+creatine models --refresh
 ```
 
 ---
@@ -318,23 +318,23 @@ opencode models --refresh
 Führen Sie Creatine im nicht interaktiven Modus aus, indem Sie direkt eine Eingabeaufforderung übergeben.
 
 ```bash
-opencode run [message..]
+creatine run [message..]
 ```
 
 Dies ist nützlich für die Skripterstellung, die Automatisierung oder wenn Sie eine schnelle Antwort wünschen, ohne das vollständige TUI zu starten. Zum Beispiel:
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "creatine run"
+creatine run Explain the use of context in Go
 ```
 
-Sie können auch eine Verbindung zu einer laufenden `opencode serve`-Instanz herstellen, um bei jedem Lauf Kaltstartzeiten für den MCP-Server zu vermeiden:
+Sie können auch eine Verbindung zu einer laufenden `creatine serve`-Instanz herstellen, um bei jedem Lauf Kaltstartzeiten für den MCP-Server zu vermeiden:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+creatine serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+creatine run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Optionen
@@ -353,7 +353,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--title"}</code></nobr>    |      | Titel für die Sitzung (verwendet eine verkürzte Eingabeaufforderung, wenn kein Wert angegeben wird) |
 | <nobr><code>{"--attach"}</code></nobr>   |      | An einen laufenden Creatine-Server anschließen (z.B. http://localhost:4096)                         |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `CREATINE_SERVER_PASSWORD`)                                      |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `CREATINE_SERVER_USERNAME` oder `opencode`)                  |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `CREATINE_SERVER_USERNAME` oder `creatine`)                  |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Verzeichnis für die Ausführung, oder Pfad auf dem Remote-Server beim Anhängen                       |
 | <nobr><code>{"--variant"}</code></nobr>  |      | Modellvariante (anbieterspezifischer Reasoning-Aufwand)                                             |
 | <nobr><code>{"--thinking"}</code></nobr> |      | Denkblöcke anzeigen                                                                                 |
@@ -366,10 +366,10 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 Starten Sie einen Headless-Creatine-Server für den API-Zugriff. Sehen Sie sich die [Server-Dokumentation](/docs/server) für die vollständige HTTP-Schnittstelle an.
 
 ```bash
-opencode serve
+creatine serve
 ```
 
-Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf Creatine-Funktionalität ohne die TUI-Schnittstelle bietet. Legen Sie `CREATINE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
+Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf Creatine-Funktionalität ohne die TUI-Schnittstelle bietet. Legen Sie `CREATINE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `creatine`).
 
 #### Optionen
 
@@ -387,7 +387,7 @@ Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf Creatine-Funktionali
 Creatine-Sitzungen verwalten.
 
 ```bash
-opencode session [command]
+creatine session [command]
 ```
 
 ---
@@ -397,7 +397,7 @@ opencode session [command]
 Listen Sie alle Creatine-Sitzungen auf.
 
 ```bash
-opencode session list
+creatine session list
 ```
 
 ##### Optionen
@@ -414,7 +414,7 @@ opencode session list
 Zeigen Sie Token-Nutzungs- und Kostenstatistiken für Ihre Creatine-Sitzungen an.
 
 ```bash
-opencode stats
+creatine stats
 ```
 
 #### Optionen
@@ -433,7 +433,7 @@ opencode stats
 Sitzungsdaten als JSON exportieren.
 
 ```bash
-opencode export [sessionID]
+creatine export [sessionID]
 ```
 
 Wenn Sie keine Sitzungs-ID angeben, werden Sie aufgefordert, eine der verfügbaren Sitzungen auszuwählen.
@@ -445,14 +445,14 @@ Wenn Sie keine Sitzungs-ID angeben, werden Sie aufgefordert, eine der verfügbar
 Importieren Sie Sitzungsdaten aus einer JSON-Datei oder einer Creatine-Freigabe-URL.
 
 ```bash
-opencode import <file>
+creatine import <file>
 ```
 
 Sie können aus einer lokalen Datei oder einer Creatine-Freigabe-URL importieren.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+creatine import session.json
+creatine import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -462,10 +462,10 @@ opencode import https://opncd.ai/s/abc123
 Starten Sie einen Headless-Creatine-Server mit einer Weboberfläche.
 
 ```bash
-opencode web
+creatine web
 ```
 
-Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über eine Webschnittstelle auf Creatine zuzugreifen. Legen Sie `CREATINE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `opencode`).
+Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über eine Webschnittstelle auf Creatine zuzugreifen. Legen Sie `CREATINE_SERVER_PASSWORD` fest, um die HTTP-Basisauthentifizierung zu aktivieren (Benutzername ist standardmäßig `creatine`).
 
 #### Optionen
 
@@ -483,7 +483,7 @@ Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über ei
 Starten Sie einen ACP (Agent Client Protocol) Server.
 
 ```bash
-opencode acp
+creatine acp
 ```
 
 Dieser Befehl startet einen ACP-Server, der über stdin/stdout unter Verwendung von nd-JSON kommuniziert.
@@ -503,7 +503,7 @@ Dieser Befehl startet einen ACP-Server, der über stdin/stdout unter Verwendung 
 Deinstallieren Sie Creatine und entfernen Sie alle zugehörigen Dateien.
 
 ```bash
-opencode uninstall
+creatine uninstall
 ```
 
 #### Optionen
@@ -522,19 +522,19 @@ opencode uninstall
 Aktualisiert Creatine auf die neueste Version oder eine bestimmte Version.
 
 ```bash
-opencode upgrade [target]
+creatine upgrade [target]
 ```
 
 Um auf die neueste Version zu aktualisieren:
 
 ```bash
-opencode upgrade
+creatine upgrade
 ```
 
 Um auf eine bestimmte Version zu aktualisieren.
 
 ```bash
-opencode upgrade v0.1.48
+creatine upgrade v0.1.48
 ```
 
 #### Optionen
@@ -585,7 +585,7 @@ Creatine kann mithilfe von Umgebungsvariablen konfiguriert werden.
 | `CREATINE_CLIENT`                     | Zeichenfolge    | Client-ID (standardmäßig `cli`)                                                  |
 | `CREATINE_ENABLE_EXA`                 | boolescher Wert | Exa-Websuchtools aktivieren                                                      |
 | `CREATINE_SERVER_PASSWORD`            | Zeichenfolge    | Aktivieren Sie die Basisauthentifizierung für `serve`/`web`                      |
-| `CREATINE_SERVER_USERNAME`            | Zeichenfolge    | Benutzernamen für die Basisauthentifizierung überschreiben (Standard `opencode`) |
+| `CREATINE_SERVER_USERNAME`            | Zeichenfolge    | Benutzernamen für die Basisauthentifizierung überschreiben (Standard `creatine`) |
 | `CREATINE_MODELS_URL`                 | Zeichenfolge    | Benutzerdefinierte URL zum Abrufen der Modellkonfiguration                       |
 
 ---
