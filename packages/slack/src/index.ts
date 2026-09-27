@@ -17,11 +17,11 @@ console.log("🚀 Starting creatine server...")
 const creatine = await createOpencode({
   port: 0,
 })
-console.log("✅ Opencode server ready")
+console.log("✅ Creatine server ready")
 
 const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string }>()
 void (async () => {
-  const events = await opencode.client.event.subscribe()
+  const events = await creatine.client.event.subscribe()
   for await (const event of events.stream) {
     if (event.type === "message.part.updated") {
       const part = event.properties.part
@@ -107,7 +107,7 @@ app.message(async ({ message, say }) => {
     body: { parts: [{ type: "text", text: message.text }] },
   })
 
-  console.log("📤 Opencode response:", JSON.stringify(result, null, 2))
+  console.log("📤 Creatine response:", JSON.stringify(result, null, 2))
 
   if (result.error) {
     console.error("❌ Failed to send message:", result.error)
