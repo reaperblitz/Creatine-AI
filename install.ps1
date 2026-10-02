@@ -145,11 +145,23 @@ $tempZip = "$tempDir.zip"
 $archiveError = $null
 try {
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-    $downloadArgs = @{ Uri = "$repoBase/archive/HEAD.zip"; OutFile = $tempZip }
-    if ($IsWindowsPowerShell) { $downloadArgs["UseBasicParsing"] = $true }
-    Invoke-WebRequest @downloadArgs
-    Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
-    $extracted = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
+    $archiveUrl = "$repoBase/archive/HEAD.zip"
+    # curl.exe is much faster than Invoke-WebRequest, especially on Windows
+    # PowerShell 5.1. Fall back to Invoke-WebRequest when it is unavailable.
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+        $curlCode = Invoke-Native -File curl.exe -Arguments @('-fsSL', '-o', $tempZip, $archiveUrl)
+        if ($curlCode -ne 0) { throw "curl.exe exited with code $curlCode" }
+    } else {
+        $downloadArgs = @{ Uri = $archiveUrl; OutFile = $tempZip; UseBasicParsing = $true }
+        Invoke-WebRequest @downloadArgs
+    }
+    # Expand-Archive chokes on dotfiles like .dockerignore (PS 5.1 bug),
+    # so extract with .NET directly.
+    $extractDir = Join-Path $tempDir 'src'
+    New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $extractDir)
+    $extracted = Get-ChildItem -Path $extractDir -Directory | Select-Object -First 1
     if (-not $extracted) {
         $archiveError = "the archive did not contain a source directory"
     } else {
