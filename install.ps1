@@ -155,27 +155,36 @@ try {
         $downloadArgs = @{ Uri = $archiveUrl; OutFile = $tempZip; UseBasicParsing = $true }
         Invoke-WebRequest @downloadArgs
     }
-    # Expand-Archive chokes on dotfiles like .dockerignore (PS 5.1 bug),
-    # so extract with .NET directly.
-    $extractDir = Join-Path $tempDir 'src'
-    New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $extractDir)
-    $extracted = Get-ChildItem -Path $extractDir -Directory | Select-Object -First 1
+    # Expand-Archive chokes on dotfiles like .dockerignore (PS 5.1 bug).
+    # The archive also contains paths longer than 260 chars, which the .NET
+    # ZipFile API (Framework) cannot extract. tar.exe (ships with Windows 10+)
+    # handles both; keep ZipFile as a best-effort fallback.
+    if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+        if ((Invoke-Native -File tar.exe -Arguments @('-xf', $tempZip, '-C', $tempDir)) -ne 0) {
+            throw 'tar.exe failed to extract the archive'
+        }
+    } else {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempDir)
+    }
+    $extracted = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
     if (-not $extracted) {
         $archiveError = "the archive did not contain a source directory"
     } else {
         if (Test-Path $AppDir) {
             Write-Info "Replacing existing source directory..."
-            Remove-Item -Path $AppDir -Recurse -Force
+            # rm may contain paths longer than 260 chars; use rd with \\?\ prefix.
+            cmd /c "rd /s /q `"\\?\$AppDir`"" | Out-Null
         }
         Move-Item -Path $extracted.FullName -Destination $AppDir -Force
     }
 } catch {
     $archiveError = $_.Exception.Message
 } finally {
+    # The tree may contain paths longer than 260 chars, which PowerShell's
+    # Remove-Item cannot handle; rd with the \\?\ prefix can.
     Remove-Item -Path $tempZip -Force -ErrorAction SilentlyContinue
-    Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $tempDir) { cmd /c "rd /s /q `"\\?\$tempDir`"" | Out-Null }
 }
 if ($archiveError) {
     Stop-WithError "Failed to download the repository archive: $archiveError"
@@ -276,5 +285,5 @@ Write-Host "  ${MUTED}$AppName${NC}          ${MUTED}# Run command${NC}"
 Write-Host "  ${MUTED}$AppName --version${NC}  ${MUTED}# Check the installation${NC}"
 Write-Host ""
 Write-Host "  ${MUTED}Re-run this script to update. To uninstall:${NC}"
-Write-Host "  ${MUTED}Remove-Item -Recurse -Force '$CreatineHome'${NC}"
+Write-Host "  ${MUTED}cmd /c rd /s /q \"\\?\\$CreatineHome\"${NC}"
 Write-Host ""
