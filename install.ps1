@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Installs the CLI from the GitHub repository into ~/.creatine:
-      1. clone (or update) the repository into ~/.creatine/app
+      1. download (or refresh) the repository archive into ~/.creatine/app
       2. install its dependencies and run it with bun
       3. write a "creatine" launcher into ~/.creatine/bin
       4. add ~/.creatine/bin to PATH
@@ -42,7 +42,7 @@ if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction Sile
 $Inline = [string]::IsNullOrEmpty($MyInvocation.InvocationName)
 
 $AppName = 'creatine'
-$RepoUrl = if ($env:CREATINE_REPO_URL) { $env:CREATINE_REPO_URL } else { 'https://github.com/reaperblitz/Creatine-AI.git' }
+$RepoUrl = if ($env:CREATINE_REPO_URL) { $env:CREATINE_REPO_URL } else { 'https://github.com/reaperblitz/Creatine-AI' }
 
 # Windows PowerShell 5.1 does not interpret ANSI escapes in Write-Host output.
 $IsWindowsPowerShell = $PSVersionTable.PSVersion.Major -lt 6
@@ -90,7 +90,7 @@ if ($Help) {
     Write-Host @"
 Creatine Installer (bun source install)
 
-Clones the repository into ~/.creatine/app, installs its dependencies with bun,
+Downloads the repository into ~/.creatine/app, installs its dependencies with bun,
 writes a '$AppName' launcher into ~/.creatine/bin and adds it to PATH.
 
 Usage: install.ps1 [-NoModifyPath]
@@ -100,7 +100,7 @@ Options:
     -NoModifyPath    Don't modify the user PATH, only print the steps
 
 Environment:
-    CREATINE_REPO_URL   Repository to install from (default: $RepoUrl)
+    CREATINE_REPO_URL   GitHub repository to install from (default: $RepoUrl)
 
 Examples:
     irm https://raw.githubusercontent.com/reaperblitz/Creatine-AI/main/install.ps1 | iex
@@ -132,59 +132,41 @@ New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 Write-Host "`n${MUTED}Installing ${NC}$AppName ${MUTED}from source using Bun...${NC}"
 
-# 3. Download or Clone Source Code into ~/.creatine/app
-if (Test-Path (Join-Path $AppDir ".git")) {
-    Write-Info "Updating existing source repository..."
-    # "bun install" rewrites bun.lock in the checkout, and a rebase configured for
-    # the branch makes "git pull" refuse those changes. Sync to the remote tip
-    # instead, which keeps this script re-runnable.
-    if ((Invoke-Native -File git -Arguments @("-C", $AppDir, "fetch", "--quiet", "--depth", "1", "origin")) -ne 0) {
-        Stop-WithError "Failed to fetch $RepoUrl"
-    }
-    if ((Invoke-Native -File git -Arguments @("-C", $AppDir, "reset", "--quiet", "--hard", "FETCH_HEAD")) -ne 0) {
-        Stop-WithError "Failed to update $AppDir. Delete it and run this script again: Remove-Item -Recurse -Force '$AppDir'"
-    }
-} elseif (Get-Command git -ErrorAction SilentlyContinue) {
-    if (Test-Path $AppDir) {
-        Write-Info "Removing existing directory that is not a git checkout..."
-        Remove-Item -Path $AppDir -Recurse -Force
-    }
-    Write-Info "Cloning GitHub repository..."
-    if ((Invoke-Native -File git -Arguments @("clone", "--quiet", "--depth", "1", $RepoUrl, $AppDir)) -ne 0) {
-        Stop-WithError "Failed to clone $RepoUrl"
-    }
-} else {
-    Write-Info "Git not found. Downloading repository archive..."
-    if (-not $RepoUrl.TrimEnd('/').StartsWith('https://github.com/')) {
-        Stop-WithError "Git is required to install from a non GitHub repository ($RepoUrl)"
-    }
-    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "creatine_install_$([guid]::NewGuid().ToString('N'))"
-    $tempZip = "$tempDir.zip"
-    $archiveError = $null
-    try {
-        New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-        $downloadArgs = @{ Uri = "$($RepoUrl.TrimEnd('/'))/archive/HEAD.zip"; OutFile = $tempZip }
-        if ($IsWindowsPowerShell) { $downloadArgs["UseBasicParsing"] = $true }
-        Invoke-WebRequest @downloadArgs
-        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
-        $extracted = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
-        if (-not $extracted) {
-            $archiveError = "the archive did not contain a source directory"
-        } else {
-            if (Test-Path $AppDir) {
-                Remove-Item -Path $AppDir -Recurse -Force
-            }
-            Move-Item -Path $extracted.FullName -Destination $AppDir -Force
+# 3. Download Source Code into ~/.creatine/app
+# Always use the GitHub archive instead of git so users only need bun.
+Write-Info "Downloading repository archive..."
+$repoBase = $RepoUrl.TrimEnd('/')
+if ($repoBase.EndsWith('.git')) { $repoBase = $repoBase.Substring(0, $repoBase.Length - 4) }
+if (-not $repoBase.StartsWith('https://github.com/')) {
+    Stop-WithError "Only GitHub repositories are supported without git: $RepoUrl"
+}
+$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "creatine_install_$([guid]::NewGuid().ToString('N'))"
+$tempZip = "$tempDir.zip"
+$archiveError = $null
+try {
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+    $downloadArgs = @{ Uri = "$repoBase/archive/HEAD.zip"; OutFile = $tempZip }
+    if ($IsWindowsPowerShell) { $downloadArgs["UseBasicParsing"] = $true }
+    Invoke-WebRequest @downloadArgs
+    Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+    $extracted = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
+    if (-not $extracted) {
+        $archiveError = "the archive did not contain a source directory"
+    } else {
+        if (Test-Path $AppDir) {
+            Write-Info "Replacing existing source directory..."
+            Remove-Item -Path $AppDir -Recurse -Force
         }
-    } catch {
-        $archiveError = $_.Exception.Message
-    } finally {
-        Remove-Item -Path $tempZip -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        Move-Item -Path $extracted.FullName -Destination $AppDir -Force
     }
-    if ($archiveError) {
-        Stop-WithError "Failed to download the repository archive: $archiveError"
-    }
+} catch {
+    $archiveError = $_.Exception.Message
+} finally {
+    Remove-Item -Path $tempZip -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+if ($archiveError) {
+    Stop-WithError "Failed to download the repository archive: $archiveError"
 }
 
 if (-not (Test-Path (Join-Path $PackageDir $EntryPoint))) {
@@ -195,8 +177,8 @@ if (-not (Test-Path (Join-Path $PackageDir $EntryPoint))) {
 Write-Info "Installing dependencies with bun..."
 Push-Location $AppDir
 try {
-    # HUSKY=0 keeps the git hooks of the checkout untouched (and avoids a failure
-    # when the sources came from the archive instead of git).
+    # HUSKY=0 avoids a failure from the checkout's git hooks, since the
+    # sources come from the archive rather than a git clone.
     $env:HUSKY = "0"
     if ((Invoke-Native -File bun -Arguments @("install")) -ne 0) {
         Write-Info "Retrying install with the minimum release age guard disabled..."
