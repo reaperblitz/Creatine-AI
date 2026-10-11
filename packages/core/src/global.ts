@@ -7,16 +7,37 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-const app = "opencode"
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const app = "creatine"
+
+const appHome = () => process.env.CREATINE_TEST_HOME ?? os.homedir()
+
+/**
+ * Windows has no XDG base directories and `xdg-basedir` never reads APPDATA, so an
+ * unconfigured install resolved to `~/.local/share/creatine` - Linux-style dotfolders in a
+ * product whose entire premise is native Windows. Prefer the native locations, but let an
+ * explicit XDG_* variable win on any platform: it is how the test suite and power users
+ * redirect state. Ignoring it on Windows let the suite write into the real user profile.
+ */
+const base =
+  process.platform === "win32"
+    ? {
+        data: process.env.XDG_DATA_HOME ?? process.env.APPDATA ?? path.join(appHome(), "AppData", "Roaming"),
+        config: process.env.XDG_CONFIG_HOME ?? process.env.APPDATA ?? path.join(appHome(), "AppData", "Roaming"),
+        state: process.env.XDG_STATE_HOME ?? process.env.APPDATA ?? path.join(appHome(), "AppData", "Roaming"),
+        cache:
+          process.env.XDG_CACHE_HOME ?? process.env.LOCALAPPDATA ?? path.join(appHome(), "AppData", "Local"),
+      }
+    : { data: xdgData!, config: xdgConfig!, state: xdgState!, cache: xdgCache! }
+
+const data = path.join(Flag.CREATINE_DATA_DIR ?? base.data, app)
+const cache = path.join(base.cache, app)
+const config = path.join(base.config, app)
+const state = path.join(Flag.CREATINE_STATE_DIR ?? base.state, app)
 const tmp = path.join(os.tmpdir(), app)
 
 const paths = {
   get home() {
-    return process.env.CREATINE_TEST_HOME ?? os.homedir()
+    return appHome()
   },
   data,
   bin: path.join(cache, "bin"),

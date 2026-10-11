@@ -10,7 +10,7 @@
 
 <p align="center">
   A retro terminal AI coding agent that runs <strong>natively in Windows PowerShell</strong> — no WSL —
-  and lets you play tic-tac-toe while it works.
+  and lets you play chess, go, tic-tac-toe and checkers while it works.
 </p>
 
 <p align="center">
@@ -80,12 +80,16 @@ creatine
 2. **A terminal that looks like a terminal.** No floating cards, no rounded SaaS panels. A retro
    TUI on purpose, because if you live in a shell your tools should look like it.
 3. **You don't have to watch a spinner.** Every agent is fast and then suddenly slow. `/boardgame`
-   gives you tic-tac-toe, checkers and chess inside the terminal while your task compiles.
+   gives you four board games while your task compiles.
 
 ### `/boardgame`
 
-The part people show their friends. Type `/boardgame` mid-task and play while the agent works, in
-the same session, no second terminal.
+The part people show their friends. Type `/boardgame` mid-task and it opens a second terminal
+window with the board, so the agent keeps working in the first one.
+
+Chess, go, tic-tac-toe and checkers — all hand-rolled, with no game engine or library
+dependencies. Play hot-seat on one keyboard, or against the AI at three difficulty levels. Every
+board keeps a move history and takes `undo`, and chess, go and checkers take `hint`.
 
 ---
 
@@ -103,9 +107,9 @@ hundreds of contributors. This is a fork with a different *where it runs* and a 
 | Running on Windows | Upstream opencode | Creatine |
 | :--- | :--- | :--- |
 | Installs in PowerShell without WSL | WSL recommended | **native, no WSL** |
-| Shell commands run through PowerShell | bash-first | **PowerShell-native** |
-| Retro ASCII TUI | modern TUI | **by design** |
-| Playable game while a task runs | — | **`/boardgame`** |
+| Shell commands run through PowerShell | bash-first | **yes — see known gaps** |
+| Retro terminal TUI | modern TUI | **by design** |
+| Board games while a task runs | — | **`/boardgame`** |
 | Dynamic `.md` subagent generation | — | **yes** |
 | Agent engine, providers, LSP, SDK | upstream's | upstream's, unchanged |
 | Open source license | MIT | MIT |
@@ -113,12 +117,24 @@ hundreds of contributors. This is a fork with a different *where it runs* and a 
 If the bigger feature surface matters more to you than running on Windows, **use
 [opencode](https://opencode.ai)** — it's free too, and it deserves the credit.
 
+### Known gaps
+
+Tracked in [`FeaturesNeeded.md`](./FeaturesNeeded.md) with wave ordering and file references.
+
+- **Config files are still named `opencode.json` / `opencode.jsonc`.** Only the directories were
+  renamed (`.creatine/`). Renaming the file itself would break every existing configuration and
+  needs a migration.
+- **Online multiplayer is not available.** The transport is written but Bun provides no
+  `RTCPeerConnection`, so `/boardgame` offers local and AI play only. See
+  [`FeaturesNeeded-Peer.md`](./FeaturesNeeded-Peer.md).
+
 <details>
 <summary><b>Full list of Creatine-specific changes</b></summary>
 
-- Retro ASCII TUI in place of the default interface
+- Retro terminal TUI in place of the default interface
 - Native Windows / PowerShell as the first-class install and run path
-- `/boardgame` — ASCII tic-tac-toe, checkers and chess, playable in-session
+- `/boardgame` — chess, go, tic-tac-toe and checkers in a second terminal window, while a task
+  runs; hot-seat, three AI difficulty levels, move history, undo and hints
 - Dynamic `.md` subagent generation inside the project directory
 - `creatine` launcher and installer (`install.ps1` / `install.sh`)
 

@@ -52,12 +52,30 @@ export async function read() {
   }
 
   if (platform() === "win32" || release().includes("WSL")) {
+    const { which } = await import("@opencode-ai/core/util/which")
+    // `-STA` is required for System.Windows.Forms clipboard access, and PowerShell 7
+    // round-trips UTF-8 where Windows PowerShell 5.1 defaults to the OEM code page.
+    const shell = which("pwsh.exe") ?? "powershell.exe"
     const script =
       "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-    const image = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
+    const image = await command(shell, ["-STA", "-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
       Buffer.alloc(0),
     )
     if (image.length) return { data: image.toString().trim(), mime: "image/png" }
+    // Read text natively before falling back to clipboardy, whose own PowerShell path
+    // mangles non-ASCII on Windows 10. Base64 keeps the payload intact regardless of the
+    // console output code page.
+    const clipboardText = await command(shell, [
+      "-STA",
+      "-NonInteractive",
+      "-NoProfile",
+      "-Command",
+      "$OutputEncoding=[Text.Encoding]::UTF8; [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Clipboard -Raw)))",
+    ]).catch(() => Buffer.alloc(0))
+    if (clipboardText.length) {
+      const decoded = Buffer.from(clipboardText.toString().trim(), "base64").toString("utf8").trim()
+      if (decoded) return { data: decoded, mime: "text/plain" }
+    }
   }
 
   if (platform() === "linux") {
@@ -74,46 +92,74 @@ export async function read() {
   if (text) return { data: text, mime: "text/plain" }
 }
 
+/**
+ * Prefer PowerShell 7 when present. Windows 10 ships only Windows PowerShell 5.1, which
+ * defaults to the OEM code page and lacks reliable non-ASCII clipboard handling.
+ */
+function powershell(has: (name: string) => boolean) {
+  if (has("pwsh.exe")) return "pwsh.exe"
+  if (has("powershell.exe")) return "powershell.exe"
+}
+
 export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
+  text: string,
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
   if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
   if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
   if (os === "linux" && has("xsel")) return ["xsel", "--clipboard", "--input"]
-  if (os === "win32" && has("powershell.exe")) {
-    return [
-      "powershell.exe",
-      "-NonInteractive",
-      "-NoProfile",
-      "-Command",
-      "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
-    ]
-  }
+  if (os !== "win32") return
+  const shell = powershell(has)
+  if (!shell) return
+  // Pass the payload base64-encoded as an argument instead of piping stdin. On Windows
+  // PowerShell 5.1, `[Console]::In.ReadToEnd()` races its own InputEncoding assignment and
+  // folds multi-line or non-ASCII text before Set-Clipboard ever sees it.
+  const encoded = Buffer.from(text, "utf8").toString("base64")
+  return [
+    shell,
+    "-NonInteractive",
+    "-NoProfile",
+    "-Command",
+    `Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')))`,
+  ]
 }
 
 let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 
+async function writeWithClipboardy(text: string) {
+  const { default: clipboardy } = await import("clipboardy")
+  await clipboardy.write(text).catch(() => undefined)
+}
+
 function getCopyMethod() {
   return (copyMethod ??= (async () => {
     const { which } = await import("@opencode-ai/core/util/which")
-    const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
-    if (native?.[0] === "osascript") {
+    const has = (name: string) => Boolean(which(name))
+    const os = platform()
+    const wayland = Boolean(process.env.WAYLAND_DISPLAY)
+    if (os === "darwin" && has("osascript")) {
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
         await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
       }
     }
-    if (native) {
+    // Windows embeds the payload in the command line, so its command is built per call
+    // rather than resolved once and cached.
+    if (os === "win32") {
+      if (!powershell(has)) return writeWithClipboardy
       return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
+        const native = copyCommand(os, wayland, has, text)
+        if (!native) return writeWithClipboardy(text)
+        await command(native[0], native.slice(1)).catch(() => undefined)
       }
     }
+    const native = copyCommand(os, wayland, has, "")
+    if (!native) return writeWithClipboardy
     return async (text: string) => {
-      const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
+      await command(native[0], native.slice(1), text).catch(() => undefined)
     }
   })())
 }

@@ -96,7 +96,7 @@ describe("opencode CLI help-text snapshots", () => {
   // versus ~1 minute if we serialized.
   cliIt.live(
     "every documented command emits stable help text",
-    ({ opencode }) =>
+    ({ opencode, creatine }) =>
       Effect.gen(function* () {
         const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
         expect(topLevel.exitCode).toBe(0)

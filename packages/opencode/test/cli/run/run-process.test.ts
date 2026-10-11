@@ -13,7 +13,7 @@ describe("creatine run (non-interactive subprocess)", () => {
   // If this fails, all the others likely will too — debug here first.
   cliIt.concurrent(
     "exits 0 and writes the response to stdout on a successful prompt",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.text("hello from the test llm")
         const result = yield* opencode.run("say hi")
@@ -25,7 +25,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "prints each completed text part in order around a tool continuation",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
           reply().text("  before tool  ").tool("bash", {
@@ -47,7 +47,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "prints reasoning before text only with --thinking",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.reason("  considering  ", { text: "  answer  " })
         const thinking = yield* opencode.run("think", { extraArgs: ["--thinking"] })
@@ -69,7 +69,7 @@ describe("creatine run (non-interactive subprocess)", () => {
   // would expire the timeout and produce a different (signal-killed) failure.
   cliIt.concurrent(
     "exits nonzero promptly when the model is unknown (regression for #27371)",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const result = yield* opencode.run("say hi", {
           model: "test/nonexistent-model",
@@ -86,7 +86,7 @@ describe("creatine run (non-interactive subprocess)", () => {
   // the prompt loop so a subsequent response can complete the run.
   cliIt.concurrent(
     "unknown stream finish preserves partial output and continues",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
           reply().text("partial response").tool("bash", {
@@ -109,7 +109,7 @@ describe("creatine run (non-interactive subprocess)", () => {
   // shape so a future event-emit change has to update this expectation.
   cliIt.concurrent(
     "--format json emits parseable line-delimited JSON to stdout",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.text("structured output")
         const result = yield* opencode.run("say hi", { format: "json" })
@@ -143,7 +143,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "--format json emits a pure error record for a rejected prompt request",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const result = yield* opencode.run("use an unknown model", {
           model: "test/nonexistent-model",
@@ -166,7 +166,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "--format json preserves reasoning, tool, and continuation ordering",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
           reply().reason("reasoning").text("before").tool("bash", {
@@ -215,7 +215,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "--format json records an unknown stream finish and continuation",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
           reply().text("partial json").tool("bash", {
@@ -250,7 +250,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "rejects requested permissions by default and allows them with the dangerous flag",
-    ({ home, llm, creatine }) =>
+    ({ home, llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.tool("bash", { command: "rm -f denied-file", description: "Remove a test file" })
         yield* llm.text("continued after rejection")
@@ -286,7 +286,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.live(
     "attach mode sends client-local file contents without a shared path",
-    ({ home, llm, creatine }) =>
+    ({ home, llm, creatine, opencode }) =>
       Effect.gen(function* () {
         const source = `${home}/client-only.txt`
         const sentinel = "client-only attachment sentinel"
@@ -308,7 +308,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "attach mode rejects local directories before prompt admission",
-    ({ home, creatine }) =>
+    ({ home, creatine, opencode }) =>
       Effect.gen(function* () {
         const result = yield* opencode.run("read the directory", {
           extraArgs: ["--attach", "http://127.0.0.1:1", `--file=${home}`, "--"],
@@ -322,7 +322,7 @@ describe("creatine run (non-interactive subprocess)", () => {
 
   cliIt.live(
     "SIGINT interrupts an active non-interactive run without leaking the process",
-    ({ llm, creatine }) =>
+    ({ llm, creatine, opencode }) =>
       Effect.gen(function* () {
         yield* llm.hang
         const run = yield* opencode.startRun("wait forever")

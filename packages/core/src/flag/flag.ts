@@ -63,6 +63,12 @@ export const Flag = {
   get CREATINE_CONFIG_DIR() {
     return process.env["CREATINE_CONFIG_DIR"]
   },
+  get CREATINE_DATA_DIR() {
+    return process.env["CREATINE_DATA_DIR"]
+  },
+  get CREATINE_STATE_DIR() {
+    return process.env["CREATINE_STATE_DIR"]
+  },
   get CREATINE_PURE() {
     return truthy("CREATINE_PURE")
   },

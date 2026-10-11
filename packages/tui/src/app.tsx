@@ -84,7 +84,7 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
-import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32SetUtf8Output } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
@@ -212,6 +212,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
+      win32SetUtf8Output()
       win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
@@ -641,6 +642,28 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogModel />)
         },
       },
+      // Level is the effort budget, orthogonal to the agent (build/plan). Casual is quick,
+      // formal is the normal mode, deep is deliberate and may debate.
+      ...(["casual", "formal", "deep"] as const).map((level) => ({
+        name: `session.level.${level}`,
+        title: `Level: ${level}`,
+        suggested: true,
+        category: "Agent",
+        slashName: level,
+        run: () => {
+          const id = route.data.type === "session" ? route.data.sessionID : undefined
+          if (!id) {
+            toast.show({ variant: "error", message: "Open a session before changing the level." })
+            return
+          }
+          void sdk.client.v2.session.switchLevel({ sessionID: id, level }).then((result) => {
+            toast.show({
+              variant: result.error ? "error" : "info",
+              message: result.error ? `Could not set level to ${level}.` : `Level set to ${level}.`,
+            })
+          })
+        },
+      })),
       {
         name: "model.cycle_recent",
         title: "Model cycle",
@@ -829,12 +852,21 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "boardgame.open",
-        title: "Play a board game (chess, go)",
+        title: "Play a board game (chess, go, tic-tac-toe, checkers)",
         slashName: "boardgame",
-        slashAliases: ["chess", "go"],
+        slashAliases: ["chess", "go", "ttt", "checkers"],
         run: () => {
-          openTerminalWindow(boardGameCommand())
-          toast.show({ variant: "info", message: "Board game opened in a new terminal window." })
+          // Returns undefined when no terminal emulator could be launched, so the toast
+          // has to reflect the real outcome rather than assuming success.
+          const pid = openTerminalWindow(boardGameCommand())
+          toast.show(
+            pid
+              ? { variant: "info", message: "Board game opened in a new terminal window." }
+              : {
+                  variant: "error",
+                  message: "Could not open a terminal window for the board game.",
+                },
+          )
           dialog.clear()
         },
         category: "System",

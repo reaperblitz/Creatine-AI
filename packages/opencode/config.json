@@ -1,0 +1,6 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "username": "patched-user",
+  "formatter": false,
+  "lsp": false
+}

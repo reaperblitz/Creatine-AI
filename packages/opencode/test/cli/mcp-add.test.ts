@@ -6,7 +6,7 @@ import { cliIt } from "../lib/cli-process"
 describe("creatine mcp add (non-interactive subprocess)", () => {
   cliIt.concurrent(
     "adds a remote server with HTTP headers",
-    ({ home, creatine }) =>
+    ({ home, creatine, opencode }) =>
       Effect.gen(function* () {
         const result = yield* opencode.spawn([
           "mcp",
@@ -38,7 +38,7 @@ describe("creatine mcp add (non-interactive subprocess)", () => {
 
   cliIt.concurrent(
     "adds a local server while preserving argv and environment values",
-    ({ home, creatine }) =>
+    ({ home, creatine, opencode }) =>
       Effect.gen(function* () {
         const result = yield* opencode.spawn([
           "mcp",

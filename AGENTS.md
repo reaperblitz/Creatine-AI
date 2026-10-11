@@ -1,3 +1,69 @@
+## Start Here
+
+**This is a fork of [opencode](https://github.com/anomalyco/opencode), rebranded "Creatine".** It
+runs natively in Windows PowerShell without WSL and ships a retro terminal UI. Upstream is synced
+roughly weekly.
+
+- **What this is:** `README.md` — pitch and the honest scope statement at `:99-101`.
+- **Domain vocabulary:** `CONTEXT.md` — the source of truth for terms like Context Source, Context
+  Epoch, Safe Provider-Turn Boundary, Session Drain. Use its language, not loose synonyms.
+- **Roadmap and priority:** **`FeaturesNeeded.md`** — every planned feature, why it exists, wave
+  ordering, and verified `file:line` references. Read before proposing work.
+- **Internal roadmap:** `specs/v2/todo.md`.
+
+### Do not do these
+
+- **Do not rename the `@opencode-ai/*` npm scope or Effect `Context.Service` tags**
+  (`"@opencode/Global"`, etc.). Internal identifiers, invisible to users, and renaming them
+  multiplies upstream merge conflicts for zero gain.
+- **Do not add engine-parity features** (more providers, LSP coverage, more tools) to compete with
+  upstream. That is an explicitly losing race — see the filter in `FeaturesNeeded.md`.
+- **Do not add local model providers.** Users connect to their own providers and choose their own
+  models. Depth modes must stay model-agnostic.
+
+### Test for any new feature
+
+> Does it reduce upstream-sync conflict, deepen the Windows/retro identity, or close a gap the
+> README already admits?
+
+### Current known-broken state
+
+Fixing these is Wave 0 / Wave 1 in `FeaturesNeeded.md` and should come before new feature work:
+
+- `packages/core/src/global.ts:10` still sets `app = "opencode"`, and there is **no
+  `process.platform` branch** — it uses `xdg-basedir`, which never reads `APPDATA`. On Windows a
+  default install writes to `C:\Users\<u>\.local\share\opencode`. This contradicts the project's
+  entire pitch and is the highest-value fix in the repo.
+- ~18 residual `opencode` strings remain in source, while `packages/opencode/test/plugin/install.test.ts`
+  and `test/tool/registry.test.ts` **already expect `.creatine`**. Source and tests disagree.
+- `packages/core/src/tool/bash.ts:49` defaults V2 to `cmd.exe`, not PowerShell. Only legacy V1
+  has the correct PowerShell invocation (`packages/opencode/src/tool/shell.ts:293-310`).
+- `SetConsoleOutputCP` is never called in any TypeScript; child output is decoded unconditionally
+  as UTF-8, so CP437/CP1252 output is mojibake.
+- `packages/tui/src/boardgame.ts` has **zero tests** across a ~430-line hand-rolled chess engine.
+
+### Traps
+
+- **Bun has no WebRTC.** `RTCPeerConnection` is `undefined` in Bun 1.4.2 and always has been.
+  `packages/tui/src/boardgame-peer.ts` is written and unit-tested but its handshake tests skip;
+  `isWebRtcAvailable()` gates the online menu entry off. Do not assume a WebRTC global exists.
+- **`packages/tui/src/boardgame.ts` runs its interactive loop only under `import.meta.main`.**
+  Changing that guard makes every test in `test/boardgame.test.ts` hang on stdin.
+- **`packages/core/test/tool-bash.test.ts:421-437` is a TODO-lock test** that reads the source and
+  asserts specific `TODO:` strings are still present. Deleting a TODO to complete its work requires
+  updating that test. Same file `:145` asserts the bash schema has no `background` property.
+- **BashTool tests are platform-aware now.** The default shell is PowerShell on Windows and
+  `/bin/sh` on POSIX, and the two use different invocation shapes — pin a shell via the fourth
+  `withTool` argument when a test needs deterministic behaviour.
+- **Legacy V1 and V2 differ.** PowerShell support, background jobs, and more exist in both with
+  different quality. Confirm which one you are editing before assuming a capability is missing.
+- After changing Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`.
+- **Known pre-existing failures on Windows** (not caused by recent work): `NpmConfig.*`, `Npm.add`,
+  `ProjectV2.resolve`, `Snapshot`, `WebFetchTool`, `cross-spawn spawner`, `VariantPlugin`. Treat
+  these as the baseline rather than a regression.
+
+---
+
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.

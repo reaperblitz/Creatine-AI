@@ -116,6 +116,9 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
+    // Level is enforced mechanically as a step ceiling, so unlike a mid-conversation system
+    // message it needs nothing injected into the model's view of history.
+    case "level-switched":
       return []
     case "user":
       return [

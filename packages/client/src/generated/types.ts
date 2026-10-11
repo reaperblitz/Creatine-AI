@@ -237,6 +237,7 @@ export type SessionsListOutput = {
     readonly parentID?: string
     readonly projectID: string
     readonly agent?: string
+    readonly level?: "casual" | "formal" | "deep"
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
     readonly tokens: {
@@ -299,6 +300,7 @@ export type SessionsCreateOutput = {
     readonly parentID?: string
     readonly projectID: string
     readonly agent?: string
+    readonly level?: "casual" | "formal" | "deep"
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
     readonly tokens: {
@@ -337,6 +339,7 @@ export type SessionsGetOutput = {
     readonly parentID?: string
     readonly projectID: string
     readonly agent?: string
+    readonly level?: "casual" | "formal" | "deep"
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly cost: number
     readonly tokens: {
@@ -371,6 +374,13 @@ export type SessionsSwitchAgentInput = {
 }
 
 export type SessionsSwitchAgentOutput = void
+
+export type SessionsSwitchLevelInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly level: { readonly level: "casual" | "formal" | "deep" }["level"]
+}
+
+export type SessionsSwitchLevelOutput = void
 
 export type SessionsSwitchModelInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -542,6 +552,13 @@ export type SessionsContextOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number }
+        readonly type: "level-switched"
+        readonly level: "casual" | "formal" | "deep"
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly time: { readonly created: number }
         readonly text: string
         readonly files?: ReadonlyArray<{
           readonly uri: string
@@ -708,6 +725,19 @@ export type SessionsHistoryOutput = {
           readonly sessionID: string
           readonly messageID: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly type: "session.next.Level.switched"
+        readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+        readonly location?: { readonly directory: string; readonly workspaceID?: string }
+        readonly data: {
+          readonly timestamp: number
+          readonly sessionID: string
+          readonly messageID: string
+          readonly level: "casual" | "formal" | "deep"
         }
       }
     | {
@@ -1171,6 +1201,19 @@ export type SessionsEventsOutput =
   | {
       readonly id: string
       readonly metadata?: { readonly [x: string]: unknown }
+      readonly type: "session.next.Level.switched"
+      readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
+      readonly location?: { readonly directory: string; readonly workspaceID?: string }
+      readonly data: {
+        readonly timestamp: number
+        readonly sessionID: string
+        readonly messageID: string
+        readonly level: "casual" | "formal" | "deep"
+      }
+    }
+  | {
+      readonly id: string
+      readonly metadata?: { readonly [x: string]: unknown }
       readonly type: "session.next.moved"
       readonly durable?: { readonly aggregateID: string; readonly seq: number; readonly version: number }
       readonly location?: { readonly directory: string; readonly workspaceID?: string }
@@ -1620,6 +1663,13 @@ export type SessionsMessageOutput = {
         readonly id: string
         readonly metadata?: { readonly [x: string]: JsonValue }
         readonly time: { readonly created: number }
+        readonly type: "level-switched"
+        readonly level: "casual" | "formal" | "deep"
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly time: { readonly created: number }
         readonly text: string
         readonly files?: ReadonlyArray<{
           readonly uri: string
@@ -1787,6 +1837,13 @@ export type MessagesListOutput = {
         readonly time: { readonly created: number }
         readonly type: "model-switched"
         readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+      }
+    | {
+        readonly id: string
+        readonly metadata?: { readonly [x: string]: JsonValue }
+        readonly time: { readonly created: number }
+        readonly type: "level-switched"
+        readonly level: "casual" | "formal" | "deep"
       }
     | {
         readonly id: string

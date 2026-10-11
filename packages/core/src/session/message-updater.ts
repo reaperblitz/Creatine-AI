@@ -122,6 +122,17 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.Level.switched": (event) => {
+        return adapter.appendMessage(
+          SessionMessage.LevelSwitched.make({
+            id: event.data.messageID,
+            type: "level-switched",
+            metadata: event.metadata,
+            level: event.data.level,
+            time: { created: event.data.timestamp },
+          }),
+        )
+      },
       "session.next.moved": () => Effect.void,
       "session.next.prompted": (event) => {
         return adapter.appendMessage(

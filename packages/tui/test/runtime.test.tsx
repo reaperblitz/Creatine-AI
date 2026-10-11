@@ -1,13 +1,22 @@
 import { expect, test } from "bun:test"
+import path from "path"
 import { testRender } from "@opentui/solid"
 import { abbreviateHome } from "../src/runtime"
 import { TuiPathsProvider, useTuiPaths } from "../src/context/runtime"
 
 test("abbreviates paths within home boundaries", () => {
-  expect(abbreviateHome("/home/test", "/home/test")).toBe("~")
-  expect(abbreviateHome("/home/test/project", "/home/test")).toBe("~/project")
-  expect(abbreviateHome("/home/tester/project", "/home/test")).toBe("/home/tester/project")
-  expect(abbreviateHome("/tmp/project", "/home/test")).toBe("/tmp/project")
+  // Fixtures are built from path.sep because abbreviateHome joins with the platform
+  // separator; hard-coded POSIX fixtures only ever passed on Linux and macOS.
+  const home = path.join(path.sep, "home", "test")
+  expect(abbreviateHome(home, home)).toBe("~")
+  expect(abbreviateHome(path.join(home, "project"), home)).toBe(`~${path.sep}project`)
+  // A sibling that merely shares a name prefix is not inside home.
+  expect(abbreviateHome(path.join(path.sep, "home", "tester", "project"), home)).toBe(
+    path.join(path.sep, "home", "tester", "project"),
+  )
+  expect(abbreviateHome(path.join(path.sep, "tmp", "project"), home)).toBe(
+    path.join(path.sep, "tmp", "project"),
+  )
 })
 
 test("provides focused immutable runtime inputs", async () => {

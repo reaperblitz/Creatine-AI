@@ -13,7 +13,7 @@ import { createAcpClient, initialize, newSession, verifierConfig } from "./helpe
 describe("opencode acp lifecycle subprocess", () => {
   cliIt.live(
     "stdin EOF exits cleanly",
-    ({ opencode }) =>
+    ({ opencode, creatine }) =>
       Effect.gen(function* () {
         const acp = yield* opencode.acp()
         acp.close()
@@ -84,9 +84,9 @@ describe("opencode acp lifecycle subprocess", () => {
 
   cliIt.live(
     "resume capability advertisement",
-    ({ opencode }) =>
+    ({ opencode, creatine }) =>
       Effect.gen(function* () {
-        const initialized = yield* initialize(yield* createAcpClient({ opencode }))
+        const initialized = yield* initialize(yield* createAcpClient({ opencode, creatine }))
 
         expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})
       }),

@@ -121,6 +121,22 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.switchLevel",
+        Effect.fn(function* (ctx) {
+          yield* session.switchLevel({ sessionID: ctx.params.sessionID, level: ctx.payload.level }).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.switchModel",
         Effect.fn(function* (ctx) {
           yield* session.switchModel({ sessionID: ctx.params.sessionID, model: ctx.payload.model }).pipe(

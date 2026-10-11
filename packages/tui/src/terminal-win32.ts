@@ -2,7 +2,9 @@ import { dlopen, ptr } from "bun:ffi"
 import type { ReadStream } from "node:tty"
 
 const STD_INPUT_HANDLE = -10
+const STD_OUTPUT_HANDLE = -11
 const ENABLE_PROCESSED_INPUT = 0x0001
+const CP_UTF8 = 65001
 
 const kernel = () =>
   dlopen("kernel32.dll", {
@@ -10,6 +12,8 @@ const kernel = () =>
     GetConsoleMode: { args: ["ptr", "ptr"], returns: "i32" },
     SetConsoleMode: { args: ["ptr", "u32"], returns: "i32" },
     FlushConsoleInputBuffer: { args: ["ptr"], returns: "i32" },
+    SetConsoleOutputCP: { args: ["u32"], returns: "i32" },
+    GetConsoleOutputCP: { args: [], returns: "u32" },
   })
 
 let k32: ReturnType<typeof kernel> | undefined
@@ -22,6 +26,24 @@ function load() {
   } catch {
     return false
   }
+}
+
+/**
+ * Switch the console output code page to UTF-8.
+ *
+ * Child output is decoded as UTF-8 unconditionally, so a CP437/CP1252 console renders
+ * anything outside that code page as mojibake. Setting LC_ALL/LC_CTYPE/LANG for PTY
+ * children does not help here — cmd and PowerShell use the console code page instead.
+ *
+ * Like console modes, the code page is console-global rather than per-process, so this is
+ * only applied to a real TTY and left alone when stdout is redirected.
+ */
+export function win32SetUtf8Output() {
+  if (process.platform !== "win32") return
+  if (!process.stdout.isTTY) return
+  if (!load()) return
+  if (k32!.symbols.GetConsoleOutputCP() === CP_UTF8) return
+  k32!.symbols.SetConsoleOutputCP(CP_UTF8)
 }
 
 /**

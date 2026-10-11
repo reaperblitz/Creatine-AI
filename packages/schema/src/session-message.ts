@@ -41,6 +41,13 @@ export const ModelSwitched = Schema.Struct({
   model: Model.Ref,
 }).annotate({ identifier: "Session.Message.ModelSwitched" })
 
+export interface LevelSwitched extends Schema.Schema.Type<typeof LevelSwitched> {}
+export const LevelSwitched = Schema.Struct({
+  ...Base,
+  type: Schema.Literal("level-switched"),
+  level: Schema.Literals(["casual", "formal", "deep"]),
+}).annotate({ identifier: "Session.Message.LevelSwitched" })
+
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
   ...Base,
@@ -200,6 +207,7 @@ export const Compaction = Schema.Struct({
 export const Message = Schema.Union([
   AgentSwitched,
   ModelSwitched,
+  LevelSwitched,
   User,
   Synthetic,
   System,
@@ -209,5 +217,14 @@ export const Message = Schema.Union([
 ])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Message" })
-export type Message = AgentSwitched | ModelSwitched | User | Synthetic | System | Shell | Assistant | Compaction
+export type Message =
+  | AgentSwitched
+  | ModelSwitched
+  | LevelSwitched
+  | User
+  | Synthetic
+  | System
+  | Shell
+  | Assistant
+  | Compaction
 export type Type = Message["type"]

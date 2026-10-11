@@ -15,7 +15,7 @@ describe("creatine serve (subprocess)", () => {
   // If this fails, all other serve tests likely will too — debug here first.
   cliIt.live(
     "starts, binds a port, and serves /global/health",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const server = yield* opencode.serve()
         expect(server.port).toBeGreaterThan(0)
@@ -38,7 +38,7 @@ describe("creatine serve (subprocess)", () => {
   // to wire the finalizer) would leak processes on every test run.
   cliIt.live(
     "kills the subprocess on scope close",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         // Inner scope so we can observe `.exited` resolving after it closes.
         const exitedPromise = yield* Effect.scoped(

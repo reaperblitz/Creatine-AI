@@ -21,6 +21,8 @@ export const Info = Schema.Struct({
   parentID: ID.pipe(optional),
   projectID: Project.ID,
   agent: Agent.ID.pipe(optional),
+  /** Absent means DEFAULT_LEVEL; legacy rows were never given an explicit level. */
+  level: SessionEvent.Level.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Schema.Finite,
   tokens: Schema.Struct({

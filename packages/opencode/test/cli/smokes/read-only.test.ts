@@ -24,7 +24,7 @@ describe("creatine read-only commands (smoke)", () => {
   // and the command should report that cleanly.
   cliIt.live(
     "mcp list: exits 0",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["mcp", "list"])
         opencode.expectExit(r, 0, "mcp list")
@@ -40,7 +40,7 @@ describe("creatine read-only commands (smoke)", () => {
   // test passes on a clean CI runner without env-var leakage.
   cliIt.live(
     "providers list: exits 0 and prints the credentials section",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["providers", "list"])
         opencode.expectExit(r, 0, "providers list")
@@ -53,7 +53,7 @@ describe("creatine read-only commands (smoke)", () => {
   // should appear because it's wired into the test provider config.
   cliIt.live(
     "models: exits 0 and lists the test model",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["models"])
         opencode.expectExit(r, 0, "models")
@@ -67,7 +67,7 @@ describe("creatine read-only commands (smoke)", () => {
   // similar. We don't pin the message — just exit cleanly.
   cliIt.live(
     "agent list: exits 0",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["agent", "list"])
         opencode.expectExit(r, 0, "agent list")
@@ -79,7 +79,7 @@ describe("creatine read-only commands (smoke)", () => {
   // empty DB. Exit 0 with no sessions.
   cliIt.live(
     "session list: exits 0",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["session", "list"])
         opencode.expectExit(r, 0, "session list")
@@ -90,7 +90,7 @@ describe("creatine read-only commands (smoke)", () => {
   // `stats` aggregates token usage from the session DB. Empty DB → all zeros.
   cliIt.live(
     "stats: exits 0",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["stats"])
         opencode.expectExit(r, 0, "stats")
@@ -104,7 +104,7 @@ describe("creatine read-only commands (smoke)", () => {
   // Accept either form — both prove the resolver ran without crashing.
   cliIt.live(
     "db path: exits 0 and prints a path or :memory:",
-    ({ creatine }) =>
+    ({ creatine, opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["db", "path"])
         opencode.expectExit(r, 0, "db path")

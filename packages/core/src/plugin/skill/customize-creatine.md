@@ -5,9 +5,9 @@
   skill's content.
 -->
 
-# Customizing opencode
+# Customizing creatine
 
-opencode validates its own config strictly and refuses to start when a field
+creatine validates its own config strictly and refuses to start when a field
 is wrong. The shapes below cover the common surface area, but they are a
 **summary, not the source of truth**.
 
@@ -20,7 +20,7 @@ defaults, and descriptions — lives in the published JSON Schema:
 
 If a field is not documented in this skill, or you need to confirm an exact
 shape before writing config, **fetch that URL and read the schema directly**
-rather than guessing. opencode hard-fails on invalid config, so the cost of a
+rather than guessing. creatine hard-fails on invalid config, so the cost of a
 wrong shape is a broken startup.
 
 Independently, every `opencode.json` should declare
@@ -29,9 +29,9 @@ mistakes as they type.
 
 ## Applying changes
 
-Config is loaded once when opencode starts and is not hot-reloaded. After
+Config is loaded once when creatine starts and is not hot-reloaded. After
 saving changes to `opencode.json`, an agent file, a skill, a plugin, or any
-other config-time file, **tell the user to quit and restart opencode** for
+other config-time file, **tell the user to quit and restart creatine** for
 the changes to take effect. The running session will keep using the
 already-loaded config until then.
 
@@ -39,14 +39,14 @@ already-loaded config until then.
 
 | Scope                         | Path                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.opencode/opencode.json` (opencode walks up from the cwd to the worktree root) |
-| Global config                 | `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc` (NOT `~/.opencode/`)                            |
-| Project agents                | `.opencode/agent/<name>.md` or `.opencode/agents/<name>.md`                                                               |
-| Global agents                 | `~/.config/opencode/agent(s)/<name>.md`                                                                                   |
-| Project commands              | `.opencode/command/<name>.md` or `.opencode/commands/<name>.md`                                                           |
-| Global commands               | `~/.config/opencode/command(s)/<name>.md`                                                                                 |
-| Project skills                | `.opencode/skill(s)/<name>/SKILL.md`                                                                                      |
-| Global skills                 | `~/.config/opencode/skill(s)/<name>/SKILL.md`                                                                             |
+| Project config                | `./opencode.json`, `./opencode.jsonc`, or `.creatine/opencode.json` (creatine walks up from the cwd to the worktree root) |
+| Global config                 | `~/.config/creatine/opencode.json` or `~/.config/creatine/opencode.jsonc` (NOT `~/.creatine/`)                            |
+| Project agents                | `.creatine/agent/<name>.md` or `.creatine/agents/<name>.md`                                                               |
+| Global agents                 | `~/.config/creatine/agent(s)/<name>.md`                                                                                   |
+| Project commands              | `.creatine/command/<name>.md` or `.creatine/commands/<name>.md`                                                           |
+| Global commands               | `~/.config/creatine/command(s)/<name>.md`                                                                                 |
+| Project skills                | `.creatine/skill(s)/<name>/SKILL.md`                                                                                      |
+| Global skills                 | `~/.config/creatine/skill(s)/<name>/SKILL.md`                                                                             |
 | External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
@@ -71,7 +71,7 @@ Every field is optional.
   "instructions": ["AGENTS.md", "docs/style.md"],
 
   "skills": {
-    "paths": [".opencode/skills", "/abs/path/to/skills"],
+    "paths": [".creatine/skills", "/abs/path/to/skills"],
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
@@ -160,12 +160,12 @@ Shape notes worth being explicit about:
 
 ## Skills
 
-opencode's skill loader scans for `**/SKILL.md` inside skill directories. The
+creatine's skill loader scans for `**/SKILL.md` inside skill directories. The
 file is named `SKILL.md` exactly, and lives in its own folder named after the
 skill:
 
 ```
-.opencode/skills/my-skill/SKILL.md
+.creatine/skills/my-skill/SKILL.md
 ```
 
 Frontmatter:
@@ -244,7 +244,7 @@ Two ways to define an agent. Use the file form for anything non-trivial.
 ### File
 
 ```
-.opencode/agent/my-reviewer.md      OR     .opencode/agents/my-reviewer.md
+.creatine/agent/my-reviewer.md      OR     .creatine/agents/my-reviewer.md
 ```
 
 ```markdown
@@ -276,17 +276,17 @@ file, `disable: true` in frontmatter.
 
 ### Built-in agents
 
-opencode ships with `build`, `plan`, `general`, `explore`. Hidden internal agents:
+creatine ships with `build`, `plan`, `general`, `explore`. Hidden internal agents:
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`.
 
 ## Commands
 
-opencode's command loader scans for `**/*.md` inside command directories. The
+creatine's command loader scans for `**/*.md` inside command directories. The
 file is named after the command, and lives directly inside the `command` folder:
 
 ```
-.opencode/command/deploy.md
+.creatine/command/deploy.md
 ```
 
 Frontmatter:
@@ -298,10 +298,10 @@ agent: build
 model: anthropic/claude-sonnet-4-6
 ---
 
-(command body in markdown: the prompt opencode runs, with $ARGUMENTS for the user's input)
+(command body in markdown: the prompt creatine runs, with $ARGUMENTS for the user's input)
 ```
 
-- `template` is the command body — everything below the frontmatter — and is required: it is the prompt opencode runs when the command is invoked. Do not also put a `template:` key in the frontmatter.
+- `template` is the command body — everything below the frontmatter — and is required: it is the prompt creatine runs when the command is invoked. Do not also put a `template:` key in the frontmatter.
 - `$ARGUMENTS` is replaced with everything the user typed after the command; `$1`, `$2`, … pull individual positional arguments.
 - Optional: `description`, `agent`, `model`, `variant`, `subtask`.
 
@@ -320,7 +320,7 @@ model: anthropic/claude-sonnet-4-6
 ```
 
 Auto-discovered plugins (no config entry needed): any `*.ts` or `*.js` file in
-`.opencode/plugin/` or `.opencode/plugins/`.
+`.creatine/plugin/` or `.creatine/plugins/`.
 
 A plugin module exports `default` (or any named export) of type
 `Plugin = (input: PluginInput, options?) => Promise<Hooks>`. The export is a
@@ -404,7 +404,7 @@ Actions: `"allow"`, `"ask"`, `"deny"`.
 
 Per-tool value forms: `"allow"` shorthand (treated as `{"*": "allow"}`), or an
 object `{ pattern: action }`. Within an object, **insertion order matters**.
-opencode evaluates the LAST matching rule, so put broad rules first and narrow
+creatine evaluates the LAST matching rule, so put broad rules first and narrow
 rules last.
 
 `permission: "allow"` (a string at the top level) is shorthand for "allow
@@ -424,10 +424,10 @@ the `plan` agent's permission ruleset (`edit: deny *`).
 
 ## Escape hatches
 
-When a user's config is broken and opencode won't start, these env vars help:
+When a user's config is broken and creatine won't start, these env vars help:
 
 - `CREATINE_DISABLE_PROJECT_CONFIG=1`: skip the project's local `opencode.json`
-  and start from globals only. Run from the project directory, opencode loads,
+  and start from globals only. Run from the project directory, creatine loads,
   the user edits the broken file, then they restart without the flag.
 - `CREATINE_CONFIG=/path/to/file.json`: load an additional explicit config.
 - `CREATINE_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json"}'`:
@@ -447,7 +447,7 @@ When a user's config is broken and opencode won't start, these env vars help:
 - For agent, command, skill, and plugin definitions, prefer creating new files
   in the correct location over inlining everything in `opencode.json`.
 - If the user's existing config is malformed, point them at the env-var escape
-  hatches above so they can edit from inside opencode without breaking their
+  hatches above so they can edit from inside creatine without breaking their
   session.
-- After saving any config change, remind the user to quit and restart opencode
+- After saving any config change, remind the user to quit and restart creatine
   — running sessions keep using the already-loaded config.

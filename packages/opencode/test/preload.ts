@@ -36,6 +36,12 @@ process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["CREATINE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
+
+// Belt and braces: global.ts honours XDG_*, but pinning the Creatine-specific overrides too
+// means a test run can never fall through to the real user profile on any platform.
+process.env["CREATINE_DATA_DIR"] = path.join(dir, "share")
+process.env["CREATINE_CONFIG_DIR"] = path.join(dir, "config")
+process.env["CREATINE_STATE_DIR"] = path.join(dir, "state")
 process.env["CREATINE_EXPERIMENTAL_EVENT_SYSTEM"] = "true"
 process.env["CREATINE_EXPERIMENTAL_WORKSPACES"] = "true"
 

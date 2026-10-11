@@ -1,3 +1,3 @@
 export { ClientError, type ClientErrorReason } from "./client-error"
-export * as Creatine from "./client"
+export * as OpenCode from "./client"
 export * from "./types"

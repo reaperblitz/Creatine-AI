@@ -11,9 +11,14 @@ import {
   type AcpClient,
 } from "./acp-test-client"
 
-export function createAcpClient(input: Pick<CliFixture, "opencode">, env?: Record<string, string>) {
+// `creatine` is an alias of the same CLI handle, so either name works at a call site.
+export function createAcpClient(
+  input: Pick<CliFixture, "opencode"> & Partial<Pick<CliFixture, "creatine">>,
+  env?: Record<string, string>,
+) {
+  const cli = input.creatine ?? input.opencode
   return Effect.gen(function* () {
-    return createJsonRpcAcpClient(yield* input.opencode.acp(env ? { env } : undefined))
+    return createJsonRpcAcpClient(yield* cli.acp(env ? { env } : undefined))
   })
 }
 

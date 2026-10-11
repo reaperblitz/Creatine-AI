@@ -129,8 +129,10 @@ const layer = Layer.effect(
     const write = Effect.fn("ToolOutputStore.write")(function* (content: string) {
       const file = path.join(directory, `tool_${Identifier.ascending()}`)
       yield* fs.ensureDir(directory).pipe(Effect.mapError((cause) => new StorageError({ operation: "write", cause })))
+      // The verbatim form is applied only at the filesystem boundary so the returned path
+      // stays readable by ordinary tools, per the managed-output contract.
       yield* fs
-        .writeFileString(file, content, { flag: "wx" })
+        .writeFileString(FSUtil.longPath(file), content, { flag: "wx" })
         .pipe(Effect.mapError((cause) => new StorageError({ operation: "write", cause })))
       return file
     })

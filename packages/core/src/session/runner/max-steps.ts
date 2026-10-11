@@ -1,3 +1,21 @@
+import { DEFAULT_LEVEL, STEP_CEILING, type Level } from "@opencode-ai/schema/session-event"
+
+/**
+ * The provider-turn allowance for a run.
+ *
+ * Level is enforced here rather than by asking the model to behave, because a prompt can be
+ * argued with and a ceiling cannot. A bounded tier never exceeds its own cap, and never
+ * *raises* an agent allowance that was already shorter. `deep` defers to the agent.
+ *
+ * An unset Level resolves to DEFAULT_LEVEL rather than to no ceiling, so a session that was
+ * never explicitly set behaves as the normal mode instead of running unbounded.
+ */
+export function stepAllowance(depth: Level | undefined, agentSteps: number | undefined) {
+  const resolved = depth ?? DEFAULT_LEVEL
+  if (resolved === "casual") return Math.min(agentSteps ?? STEP_CEILING.casual, STEP_CEILING.casual)
+  if (resolved === "formal") return Math.min(agentSteps ?? STEP_CEILING.formal, STEP_CEILING.formal)
+  return agentSteps
+}
 export const MAX_STEPS_PROMPT = `CRITICAL - MAXIMUM STEPS REACHED
 
 The maximum number of steps allowed for this task has been reached. Tools are disabled until next user input. Respond with text only.

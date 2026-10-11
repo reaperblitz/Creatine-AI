@@ -62,6 +62,46 @@ export const AgentSwitched = Event.define({
 })
 export type AgentSwitched = typeof AgentSwitched.Type
 
+/**
+ * Deliberation budget for subsequent provider turns.
+ *
+ * `casual` is the quick tier: the shortest allowance, barred from debate. For a one-line
+ * request.
+ *
+ * `formal` is the normal mode. Slower than casual but still quick, and bounded: enough turns
+ * to build a whole program or any other substantial piece of work without taking a long time,
+ * answering directly rather than deliberating. This is the default.
+ *
+ * `deep` is the deliberative tier: the agent's own unbounded allowance, plus debate.
+ *
+ * The tier is orthogonal to the selected model: Level never changes which provider or model
+ * is used, only how hard a run may work. That matters for cost, because a casual run must
+ * never quietly bill a frontier model.
+ */
+export const Level = Schema.Literals(["casual", "formal", "deep"])
+export type Level = typeof Level.Type
+export const DEFAULT_LEVEL: Level = "formal"
+
+/**
+ * Hard step ceilings for the bounded tiers, enforced by the runner rather than by prompting.
+ * `deep` has no ceiling of its own and defers to the agent's configured allowance.
+ */
+export const STEP_CEILING = { casual: 8, formal: 40 } as const
+
+/** Only `deep` may deliberate; the bounded tiers answer directly. */
+export const allowsDebate = (level: Level | undefined) => (level ?? DEFAULT_LEVEL) === "deep"
+
+export const LevelSwitched = Event.define({
+  type: "session.next.Level.switched",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessage.ID,
+    level: Level,
+  },
+})
+export type LevelSwitched = typeof LevelSwitched.Type
+
 export const ModelSwitched = Event.define({
   type: "session.next.model.switched",
   ...options,
@@ -448,6 +488,7 @@ export namespace RevertEvent {
 export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
+  LevelSwitched,
   Moved,
   Prompted,
   PromptAdmitted,
@@ -479,6 +520,7 @@ export const DurableDefinitions = Event.inventory(
 export const Definitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
+  LevelSwitched,
   Moved,
   Prompted,
   PromptAdmitted,

@@ -21,6 +21,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { Revert } from "@opencode-ai/schema/revert"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { Level } from "@opencode-ai/schema/session-event"
 
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
@@ -185,6 +186,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           }),
         ),
     )
+    .add(
+        HttpApiEndpoint.post("session.switchLevel", "/api/session/:sessionID/level", {
+          params: { sessionID: Session.ID },
+          payload: Schema.Struct({ level: Level }),
+          success: HttpApiSchema.NoContent,
+          error: SessionNotFoundError,
+        })
+          .middleware(sessionLocationMiddleware)
+          .annotateMerge(
+            OpenApi.annotations({
+              identifier: "v2.session.switchLevel",
+              summary: "Switch session deliberation Level",
+              description:
+                "Casual caps the provider-turn allowance and bars debate; deep keeps the agent's own allowance. Does not change the selected model.",
+            }),
+          ),
+      )
     .add(
       HttpApiEndpoint.post("session.switchModel", "/api/session/:sessionID/model", {
         params: { sessionID: Session.ID },

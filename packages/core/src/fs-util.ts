@@ -263,6 +263,24 @@ export namespace FSUtil {
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   }
 
+  /**
+   * Convert a fully-built Windows path to its verbatim `\\?\` form once it approaches the
+   * legacy MAX_PATH limit. Call this on the complete path, after any segments are appended.
+   *
+   * Paths already in a verbatim or device form are returned untouched, and short paths are
+   * left alone so ordinary paths stay readable in logs and error messages.
+   */
+  export function longPath(p: string): string {
+    if (process.platform !== "win32") return p
+    if (p.startsWith("\\\\?\\") || p.startsWith("\\\\.\\")) return p
+    const normalized = windowsPath(p)
+    if (normalized.length <= 240) return normalized
+    // UNC paths move under the \\?\UNC\ namespace; drive-letter paths keep their drive.
+    return normalized.startsWith("\\\\")
+      ? `\\\\?\\UNC\\${normalized.slice(2)}`
+      : `\\\\?\\${normalized}`
+  }
+
   export function overlaps(a: string, b: string) {
     return contains(a, b) || contains(b, a)
   }

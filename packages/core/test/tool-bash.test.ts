@@ -26,6 +26,7 @@ const sessionID = SessionV2.ID.make("ses_bash_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
 const runs: Array<{
   readonly command: string
+  readonly args?: readonly string[]
   readonly cwd?: string
   readonly shell?: string | boolean
   readonly options?: AppProcess.RunOptions
@@ -67,17 +68,39 @@ const appProcess = Layer.succeed(
     run: (command: ChildProcess.Command, options?: AppProcess.RunOptions) =>
       Effect.suspend(() => {
         if (command._tag !== "StandardCommand") throw new Error("expected standard command")
-        runs.push({ command: command.command, cwd: command.options.cwd, shell: command.options.shell, options })
+        runs.push({
+          command: command.command,
+          args: command.args,
+          cwd: command.options.cwd,
+          shell: command.options.shell,
+          options,
+        })
         return runFailure ? Effect.fail(runFailure) : Effect.succeed(result)
       }),
   } as unknown as AppProcess.Interface),
 )
-const config = Layer.succeed(
-  Config.Service,
-  Config.Service.of({
-    entries: () => Effect.succeed([]),
-  }),
-)
+/**
+ * The default shell differs per platform: PowerShell on Windows, /bin/sh elsewhere. Tests
+ * that care about behaviour rather than the shell can pin one explicitly.
+ */
+const configLayer = (shell?: string) =>
+  Layer.succeed(
+    Config.Service,
+    Config.Service.of({
+      entries: () => Effect.succeed(shell ? [{ type: "document" as const, info: { shell } }] : []),
+    }),
+  )
+const config = configLayer()
+
+/**
+ * PowerShell is invoked directly with explicit flags; every other shell is handed to the
+ * spawner's `shell` option with the raw command. This is what the tool should do on the
+ * current platform given no configured shell.
+ */
+const expectedInvocation = (command: string, cwd: string) =>
+  process.platform === "win32"
+    ? { command: expect.stringMatching(/pwsh|powershell/i), args: expect.arrayContaining([command]), cwd }
+    : { command, args: [], cwd }
 
 const reset = () => {
   assertions.length = 0
@@ -101,6 +124,7 @@ const withTool = <A, E, R>(
   directory: string,
   body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
   processLayer: Layer.Layer<AppProcess.Service> = appProcess,
+  shell?: string,
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -116,7 +140,7 @@ const withTool = <A, E, R>(
           [Location.node, activeLocation],
           [PermissionV2.node, permission],
           [AppProcess.node, processLayer],
-          [Config.node, config],
+          [Config.node, shell ? configLayer(shell) : config],
           [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
         ],
       ),
@@ -133,6 +157,41 @@ const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
 const it = testEffect(Layer.empty)
 
 describe("BashTool", () => {
+  it.live("invokes PowerShell directly and skips the POSIX advisory scan", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(
+          tmp.path,
+          (registry) => settleTool(registry, call({ command: "Get-Location" })),
+          appProcess,
+          "pwsh",
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(runs).toHaveLength(1)
+              expect(runs[0]?.command).toBe("pwsh")
+              expect(runs[0]?.args).toEqual([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-Location",
+              ])
+              // The tokeniser mis-parses PowerShell syntax, so no advisory is emitted.
+              expect(settled.output?.structured).not.toHaveProperty("warnings")
+              expect(settled.output?.content[1]).toMatchObject({
+                type: "text",
+                text: expect.not.stringContaining("Warnings:"),
+              })
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
   it.live("registers and returns structured successful output from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -167,7 +226,7 @@ describe("BashTool", () => {
                 ],
               },
             })
-            expect(runs).toMatchObject([{ command: "pwd", cwd: realpathSync(tmp.path) }])
+            expect(runs).toMatchObject([expectedInvocation("pwd", realpathSync(tmp.path))])
             expect(runs[0]?.options).toMatchObject({
               combineOutput: true,
               maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
@@ -319,7 +378,14 @@ describe("BashTool", () => {
         reset()
         denyAction = "external_directory"
         const target = path.join(outside.path, "secret.txt")
-        return withTool(active.path, (registry) => settleTool(registry, call({ command: `cat ${target}` }))).pipe(
+        // Pin a non-PowerShell so the advisory scan runs: the tokeniser is POSIX-only and
+        // is deliberately skipped under PowerShell.
+        return withTool(
+          active.path,
+          (registry) => settleTool(registry, call({ command: `cat ${target}` })),
+          appProcess,
+          "/bin/sh",
+        ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["bash"])
@@ -424,7 +490,7 @@ test("keeps locked deferred parity TODOs visible", async () => {
     "Port tree-sitter bash / PowerShell parser-based approval reduction.",
     "Port BashArity reusable command-prefix approvals.",
     "Replace token-based command-argument external-directory advisories with parser-based detection.",
-    "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
+    "Resolve cmd.exe-specific path handling, now that PowerShell is the Windows default.",
     "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
     "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
     "Persist background job status and define restart recovery before exposing remote observation.",

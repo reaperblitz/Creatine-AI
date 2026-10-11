@@ -8,6 +8,8 @@ import { statics } from "./schema"
 export const ID = Schema.String.pipe(
   Schema.brand("ProviderV2.ID"),
   statics((schema) => ({
+    // `opencode` stays as the OpenCode Zen service id; `creatine` is this fork's own entry.
+    creatine: schema.make("creatine"),
     opencode: schema.make("opencode"),
     anthropic: schema.make("anthropic"),
     openai: schema.make("openai"),

@@ -18,6 +18,7 @@ export type Event =
   | EventMessagePartRemoved
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
+  | EventSessionNextLevelSwitched
   | EventSessionNextMoved
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
@@ -840,6 +841,16 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.Level.switched"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          level: "casual" | "formal" | "deep"
+        }
+      }
+    | {
+        id: string
         type: "session.next.moved"
         properties: {
           timestamp: number
@@ -1610,6 +1621,7 @@ export type GlobalEvent = {
     | SyncEventMessagePartRemoved
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
+    | SyncEventSessionNextLevelSwitched
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
@@ -2742,6 +2754,7 @@ export type UnknownError1 = {
 export type SessionDurableEvent =
   | SessionNextAgentSwitched
   | SessionNextModelSwitched
+  | SessionNextLevelSwitched
   | SessionNextMoved
   | SessionNextPrompted
   | SessionNextPromptAdmitted
@@ -2869,6 +2882,7 @@ export type V2Event =
   | MessagePartRemoved
   | SessionNextAgentSwitched
   | SessionNextModelSwitched
+  | SessionNextLevelSwitched
   | SessionNextMoved
   | SessionNextPrompted
   | SessionNextPromptAdmitted
@@ -3331,6 +3345,23 @@ export type SyncEventSessionNextModelSwitched = {
       sessionID: string
       messageID: string
       model: ModelRef
+    }
+  }
+}
+
+export type SyncEventSessionNextLevelSwitched = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.Level.switched.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+      level: "casual" | "formal" | "deep"
     }
   }
 }
@@ -3910,6 +3941,7 @@ export type SessionV2Info = {
   parentID?: string
   projectID: string
   agent?: string
+  level?: "casual" | "formal" | "deep"
   model?: ModelRef
   cost: number
   tokens: {
@@ -3971,6 +4003,18 @@ export type SessionMessageModelSwitched = {
   }
   type: "model-switched"
   model: ModelRef
+}
+
+export type SessionMessageLevelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "level-switched"
+  level: "casual" | "formal" | "deep"
 }
 
 export type SessionMessageUser = {
@@ -4158,6 +4202,7 @@ export type SessionMessageCompaction = {
 export type SessionMessage =
   | SessionMessageAgentSwitched
   | SessionMessageModelSwitched
+  | SessionMessageLevelSwitched
   | SessionMessageUser
   | SessionMessageSynthetic
   | SessionMessageSystem
@@ -4202,6 +4247,26 @@ export type SessionNextModelSwitched = {
     sessionID: string
     messageID: string
     model: ModelRef
+  }
+}
+
+export type SessionNextLevelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.Level.switched"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    level: "casual" | "formal" | "deep"
   }
 }
 
@@ -6270,6 +6335,17 @@ export type EventSessionNextModelSwitched = {
     sessionID: string
     messageID: string
     model: ModelRef
+  }
+}
+
+export type EventSessionNextLevelSwitched = {
+  id: string
+  type: "session.next.Level.switched"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    level: "casual" | "formal" | "deep"
   }
 }
 
@@ -11515,6 +11591,43 @@ export type V2SessionSwitchAgentResponses = {
 }
 
 export type V2SessionSwitchAgentResponse = V2SessionSwitchAgentResponses[keyof V2SessionSwitchAgentResponses]
+
+export type V2SessionSwitchLevelData = {
+  body: {
+    level: "casual" | "formal" | "deep"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/level"
+}
+
+export type V2SessionSwitchLevelErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionSwitchLevelError = V2SessionSwitchLevelErrors[keyof V2SessionSwitchLevelErrors]
+
+export type V2SessionSwitchLevelResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionSwitchLevelResponse = V2SessionSwitchLevelResponses[keyof V2SessionSwitchLevelResponses]
 
 export type V2SessionSwitchModelData = {
   body: {

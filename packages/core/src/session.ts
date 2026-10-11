@@ -140,6 +140,9 @@ export interface Interface {
     limit: number
   }) => Effect.Effect<{ events: ReadonlyArray<SessionEvent.DurableEvent>; hasMore: boolean }, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
+  readonly switchLevel: (
+    input: { sessionID: SessionSchema.ID; level: SessionEvent.Level },
+  ) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
@@ -397,6 +400,17 @@ const layer = Layer.effect(
           messageID: SessionMessage.ID.create(),
           timestamp: yield* DateTime.now,
           agent: input.agent,
+        })
+      }),
+      switchLevel: Effect.fn("V2Session.switchLevel")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        // Level affects subsequent provider turns only; a turn already under way keeps its own sample.
+        if ((session.level ?? SessionEvent.DEFAULT_LEVEL) === input.level) return
+        yield* events.publish(SessionEvent.LevelSwitched, {
+          sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          level: input.level,
         })
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {

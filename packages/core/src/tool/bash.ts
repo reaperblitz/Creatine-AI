@@ -14,6 +14,7 @@ import { PositiveInt } from "../schema"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { which } from "../util/which"
 
 export const name = "bash"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -46,7 +47,19 @@ const Output = Schema.Struct({
 
 type Output = typeof Output.Type
 
-const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
+/**
+ * PowerShell-first on Windows, mirroring the candidate order already proven in `Shell.win()`.
+ * Falling back silently to cmd.exe is what made V2 feel unlike the legacy shell tool.
+ */
+const defaultShell = () => {
+  if (process.platform !== "win32") return "/bin/sh"
+  return which("pwsh") ?? which("powershell") ?? process.env.COMSPEC ?? "cmd.exe"
+}
+
+const isPowerShell = (shell: string) => {
+  const base = path.basename(shell).toLowerCase().replace(/\.exe$/, "")
+  return base === "pwsh" || base === "powershell"
+}
 
 const modelOutput = (output: Output) => {
   const warnings = output.warnings?.length
@@ -66,7 +79,7 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
 // TODO: Port BashArity reusable command-prefix approvals.
 // TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
-// TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
+// TODO: Resolve cmd.exe-specific path handling, now that PowerShell is the Windows default.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
 // TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
 // TODO: Persist background job status and define restart recovery before exposing remote observation.
@@ -106,7 +119,7 @@ const layer = Layer.effectDiscard(
     yield* tools
       .register({
         [name]: Tool.make({
-          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
+          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses PowerShell (pwsh, then powershell, then COMSPEC) on Windows and /bin/sh on POSIX.`,
           input: Input,
           output: Output,
           structured: StructuredOutput,
@@ -135,10 +148,20 @@ const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-              const warnings = (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
-                (directory) =>
-                  `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
-              )
+              const entries = yield* config.entries()
+              const shell =
+                Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
+                  .shell ?? defaultShell()
+              // The advisory scan below is a POSIX tokenizer. It mis-parses PowerShell's
+              // `$env:`, backticks, `${...}` and `.\`, so reporting on it there would be
+              // noise rather than a signal.
+              const powershell = isPowerShell(shell)
+              const warnings = powershell
+                ? []
+                : (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
+                    (directory) =>
+                      `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. The shell runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
+                  )
               yield* permission.assert({
                 action: name,
                 resources: [input.command],
@@ -151,17 +174,26 @@ const layer = Layer.effectDiscard(
               if ((yield* fs.stat(target.canonical)).type !== "Directory")
                 return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
-              const entries = yield* config.entries()
-              const shell =
-                Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
-                  .shell ?? defaultShell()
-              const command = ChildProcess.make(input.command, [], {
-                cwd: target.canonical,
-                shell,
-                stdin: "ignore",
-                detached: process.platform !== "win32",
-                forceKillAfter: Duration.seconds(3),
-              })
+              // PowerShell is invoked directly with explicit flags rather than handed to
+              // cross-spawn's `shell` option, matching the proven legacy invocation.
+              const command = ChildProcess.make(
+                powershell ? shell : input.command,
+                powershell ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", input.command] : [],
+                powershell
+                  ? {
+                      cwd: target.canonical,
+                      stdin: "ignore",
+                      detached: false,
+                      forceKillAfter: Duration.seconds(3),
+                    }
+                  : {
+                      cwd: target.canonical,
+                      shell,
+                      stdin: "ignore",
+                      detached: process.platform !== "win32",
+                      forceKillAfter: Duration.seconds(3),
+                    },
+              )
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
                 .run(command, {

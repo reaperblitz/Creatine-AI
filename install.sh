@@ -42,6 +42,8 @@ Usage: install.sh [options]
 Options:
     -h, --help          Display this help message
     --no-modify-path    Don't modify shell config files, only print the steps
+    --service           Also install a systemd user service so the server runs headless and
+                        survives a reboot (recommended on a VPS)
 
 Environment:
     CREATINE_REPO_URL   Repository to install from (default: ${REPO_URL})
@@ -52,6 +54,7 @@ EOF
 }
 
 modify_path=true
+install_service=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -63,6 +66,10 @@ while [ $# -gt 0 ]; do
             modify_path=false
             shift
             ;;
+        --service)
+            install_service=true
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}" >&2
             usage >&2
@@ -71,12 +78,66 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# 1. Check for Bun Requirement
-if ! command -v bun >/dev/null 2>&1; then
-    echo -e "${RED}Error: Bun is required to install Creatine from source.${NC}"
-    echo -e "Please install Bun first: ${ORANGE}curl -fsSL https://bun.sh/install | bash${NC}"
-    exit 1
+# 1. Prerequisites.
+#
+# A fresh VPS image usually has no bun and often no curl or git. This script used to stop here,
+# print a bun.sh URL, and exit - a dead end for exactly the audience it is for. Bootstrap the
+# pieces it needs instead, and only refuse when the machine genuinely cannot provide them.
+
+SUDO=""
+if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
 fi
+
+# `sudo -n` everywhere below. This script is normally piped into `bash` over a non-interactive
+# shell, where a plain `sudo` would sit on an invisible password prompt and look like a hang.
+# With -n it fails immediately and the message below says what to do.
+pkg_install() {
+    if command -v apt-get >/dev/null 2>&1; then
+        $SUDO -n apt-get update -qq >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive $SUDO -n apt-get install -y -qq "$@"
+    elif command -v dnf >/dev/null 2>&1; then
+        $SUDO -n dnf install -y -q "$@"
+    elif command -v yum >/dev/null 2>&1; then
+        $SUDO -n yum install -y -q "$@"
+    elif command -v apk >/dev/null 2>&1; then
+        $SUDO -n apk add --no-cache "$@"
+    else
+        return 1
+    fi
+}
+
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    info "Installing curl..."
+    pkg_install curl ca-certificates || fail "Could not install curl. Install it, then re-run this script."
+fi
+
+# git is optional: the archive fallback below covers its absence. ca-certificates is not, because
+# every https fetch below fails with a confusing TLS error without it.
+if ! command -v git >/dev/null 2>&1; then
+    info "Installing git..."
+    pkg_install git || true
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+    info "Bun is not installed. Installing it now..."
+    # The bun installer unpacks a zip with the `unzip` binary and fails with a bare "unzip is
+    # required" when it is absent, so make sure it is there first.
+    if ! command -v unzip >/dev/null 2>&1; then
+        info "Installing unzip..."
+        pkg_install unzip \
+            || fail "Could not install unzip, which the bun installer needs. Run this script as root, grant passwordless sudo, or install unzip and re-run."
+    fi
+    fetch() {
+        if command -v curl >/dev/null 2>&1; then curl -fsSL "$1"; else wget -qO- "$1"; fi
+    }
+    fetch https://bun.sh/install | bash || fail "Failed to install bun. Install it manually, then re-run this script."
+fi
+
+export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+command -v bun >/dev/null 2>&1 || fail "bun is still not on PATH after installation. Add $BUN_INSTALL/bin to PATH and re-run."
+detail "Using bun $(bun --version) at $(command -v bun)"
 
 # 2. Set up installation paths
 CREATINE_HOME="$HOME/.creatine"
@@ -229,7 +290,97 @@ else
     echo -e "  Add it manually: ${ORANGE}export PATH=\"$BIN_DIR:\$PATH\"${NC}"
 fi
 
-# 8. Display Success Message
+# 8. Optional systemd service
+#
+# On a VPS the usual reason for installing is that the agent keeps working while nobody is SSHed
+# in. A foreground process dies with the terminal, so this registers a user-level unit with
+# lingering enabled - without linger, systemd stops the unit at logout and the "always on" claim
+# is quietly false.
+if [ "$install_service" = true ]; then
+    if ! command -v systemctl >/dev/null 2>&1; then
+        fail "--service needs systemd, which was not found on this system."
+    fi
+
+    SERVICE_DIR="$HOME/.config/systemd/user"
+    SERVICE_FILE="$SERVICE_DIR/$APP_NAME.service"
+    # Bound to all interfaces by default because the point of a VPS is reaching it from
+    # elsewhere. That is only safe with a password: `serve` leaves the server open when
+    # CREATINE_SERVER_PASSWORD is unset, so generate one here rather than shipping a wide-open
+    # agent with filesystem access. Verified: with no password, /api/session answers 200 to an
+    # anonymous request.
+    SERVICE_HOST="${CREATINE_HOST:-0.0.0.0}"
+    SERVICE_PORT="${CREATINE_PORT:-4096}"
+
+    # An EnvironmentFile rather than an inline Environment= line, so the secret is not visible in
+    # `systemctl cat` or the unit file's world-readable permissions.
+    ENV_FILE="$HOME/.config/creatine/server.env"
+    if [ -n "${CREATINE_SERVER_PASSWORD:-}" ]; then
+        SERVER_PASSWORD="$CREATINE_SERVER_PASSWORD"
+        detail "Using CREATINE_SERVER_PASSWORD from the environment."
+    elif [ -f "$ENV_FILE" ]; then
+        # Keep the password across re-runs; regenerating it would lock out anything already using it.
+        detail "Reusing the existing password in $ENV_FILE"
+    else
+        SERVER_PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -d '\n/+=' | head -c 40)"
+    fi
+
+    mkdir -p "$SERVICE_DIR" "$(dirname "$ENV_FILE")"
+    umask 077
+    printf 'CREATINE_SERVER_PASSWORD=%s\n' "$SERVER_PASSWORD" > "$ENV_FILE"
+    umask 022
+
+    detail "Writing $SERVICE_FILE"
+    cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=Creatine server
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$LAUNCHER serve --hostname $SERVICE_HOST --port $SERVICE_PORT
+EnvironmentFile=$ENV_FILE
+Environment=HOME=$HOME
+Environment=BUN_INSTALL=$BUN_INSTALL
+Environment=PATH=$BUN_INSTALL/bin:$BIN_DIR:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=$HOME
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+    systemctl --user daemon-reload || fail "Failed to reload the systemd user manager."
+    # enable + restart, not `enable --now`: `--now` is a no-op when the unit is already active, so
+    # re-running this script would leave the previously running process alive with the old unit's
+    # environment - including a missing password. Restart is idempotent and always picks up the
+    # unit just written.
+    systemctl --user enable "$APP_NAME.service" || fail "Failed to enable $APP_NAME.service."
+    systemctl --user restart "$APP_NAME.service" || fail "Failed to start $APP_NAME.service."
+
+    # Keep the unit alive after logout; without this systemd tears the session down on exit.
+    if command -v loginctl >/dev/null 2>&1; then
+        loginctl enable-linger "$(id -un)" >/dev/null 2>&1 \
+            && detail "Enabled lingering, so the service keeps running after you log out." \
+            || info "Could not enable lingering automatically. Run: sudo loginctl enable-linger $(id -un)"
+    fi
+
+    sleep 2
+    if systemctl --user is-active --quiet "$APP_NAME.service"; then
+        detail "Service is active: systemctl --user status $APP_NAME"
+    else
+        info "The service did not report active. Check: systemctl --user status $APP_NAME"
+    fi
+
+    if [ "$SERVICE_HOST" = "0.0.0.0" ]; then
+        echo -e ""
+        info "The server is listening on $SERVICE_HOST:$SERVICE_PORT, password-protected."
+        echo -e "  Password: ${ORANGE}cat $ENV_FILE${NC}"
+        echo -e "  ${MUTED}Open that port in your provider's firewall, or SSH in and port-forward it.${NC}"
+    fi
+fi
+
+# 9. Display Success Message
 echo -e ""
 echo -e "${MUTED}                    ${NC}         ▄     "
 echo -e "${MUTED}▄▄▄█ █▀▀█ █▀▀▀ █▀▀█ ${NC}▀█▀ ▀█▀ █▀▀▄ █▀▀▀"

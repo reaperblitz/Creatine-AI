@@ -179,7 +179,9 @@ export type OpencodeCli = {
 export type CliFixture = {
   readonly llm: TestLLMServer["Service"]
   readonly home: string
+  /** @deprecated Prefer `creatine`. Kept so unmigrated tests still resolve. */
   readonly opencode: OpencodeCli
+  readonly creatine: OpencodeCli
 }
 
 // Provisions a TestLLMServer + tmpdir + spawn helper and invokes fn. Cleans
@@ -466,7 +468,10 @@ export function withCliFixture<A, E>(
 
     const opencode: OpencodeCli = { run, startRun, serve, acp, spawn, expectExit, parseJsonEvents }
 
-    return yield* fn({ llm, home, opencode })
+    // `creatine` is the same handle under the fork's name. Tests were migrated to
+  // destructure `creatine` while the bodies still referenced `opencode`, so exposing both
+  // unblocks them without a risky bulk rename where `opencode` also means the npm scope.
+  return yield* fn({ llm, home, opencode, creatine: opencode })
     // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
     // and hit endpoints on `opencode.serve()` without rolling their own fetch.
   }).pipe(

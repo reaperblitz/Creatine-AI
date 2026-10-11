@@ -13,6 +13,8 @@ import type {
   SessionsGetOutput,
   SessionsSwitchAgentInput,
   SessionsSwitchAgentOutput,
+  SessionsSwitchLevelInput,
+  SessionsSwitchLevelOutput,
   SessionsSwitchModelInput,
   SessionsSwitchModelOutput,
   SessionsPromptInput,
@@ -349,6 +351,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/agent`,
             body: { agent: input["agent"] },
+            successStatus: 204,
+            declaredStatuses: [404, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      switchLevel: (input: SessionsSwitchLevelInput, requestOptions?: RequestOptions) =>
+        request<SessionsSwitchLevelOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/level`,
+            body: { level: input["level"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
