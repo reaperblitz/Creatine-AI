@@ -18,8 +18,9 @@ roughly weekly.
   multiplies upstream merge conflicts for zero gain.
 - **Do not add engine-parity features** (more providers, LSP coverage, more tools) to compete with
   upstream. That is an explicitly losing race — see the filter in `FeaturesNeeded.md`.
-- **Do not add local model providers.** Users connect to their own providers and choose their own
-  models. Depth modes must stay model-agnostic.
+- **Local models are allowed, but stay honest about them.** Ollama is the supported local provider.
+  Depth modes must stay model-agnostic, and a local model must never be presented as the only
+  option for someone whose machine cannot actually run it.
 
 ### Test for any new feature
 

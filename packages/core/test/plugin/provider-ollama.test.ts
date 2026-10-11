@@ -1,10 +1,33 @@
 import { describe, expect, test } from "bun:test"
-import { isRunning, parseTags, pull, recommend, RECOMMENDED, OLLAMA_HOST } from "../../src/plugin/provider/ollama"
+import { displayName, isRunning, parseTags, pull, recommend, RECOMMENDED, OLLAMA_HOST } from "../../src/plugin/provider/ollama"
 import { Effect } from "effect"
 
+describe("the offered model list", () => {
+  test("offers two lightweight and two deeper models, as asked", () => {
+    expect(RECOMMENDED).toHaveLength(4)
+    const light = RECOMMENDED.filter((m) => m.minRamGb <= 4)
+    const deep = RECOMMENDED.filter((m) => m.minRamGb >= 8)
+    expect(light).toHaveLength(2)
+    expect(deep).toHaveLength(2)
+  })
+
+  test("covers both qwen and llama, so it is not one vendor's list", () => {
+    expect(RECOMMENDED.some((m) => m.id.startsWith("qwen"))).toBe(true)
+    expect(RECOMMENDED.some((m) => m.id.startsWith("llama"))).toBe(true)
+  })
+
+  test("every model states the RAM and disk it needs, in the name the user sees", () => {
+    for (const model of RECOMMENDED) {
+      const shown = displayName(model)
+      expect(shown).toContain(`${model.minRamGb} GB RAM`)
+      expect(shown).toContain(`${model.diskGb} GB disk`)
+    }
+  })
+})
+
 describe("model sizing by hardware", () => {
-  test("a small machine gets the small model, not the largest that technically fits", () => {
-    expect(recommend({ totalRamGb: 4, cpuCores: 2 }).id).toBe("qwen2.5-coder:1.5b")
+  test("a small machine gets a lightweight model, not the largest that technically fits", () => {
+    expect(recommend({ totalRamGb: 4, cpuCores: 2 }).id).toBe("llama3.2:3b")
     expect(recommend({ totalRamGb: 2, cpuCores: 1 }).id).toBe("qwen2.5-coder:1.5b")
   })
 
@@ -13,25 +36,27 @@ describe("model sizing by hardware", () => {
     expect(recommend({ totalRamGb: 16, cpuCores: 8 }).id).toBe("qwen2.5-coder:7b")
   })
 
-  test("bigger RAM climbs the ladder rather than always pinning the smallest", () => {
+  test("bigger RAM climbs to the deeper model", () => {
     expect(recommend({ totalRamGb: 24, cpuCores: 8 }).id).toBe("qwen2.5-coder:14b")
-    expect(recommend({ totalRamGb: 64, cpuCores: 16 }).id).toBe("qwen2.5-coder:32b")
+    expect(recommend({ totalRamGb: 64, cpuCores: 16 }).id).toBe("qwen2.5-coder:14b")
   })
 
   test("a machine below every threshold still gets something rather than nothing", () => {
-    // Better a small model that runs than no suggestion at all.
     expect(recommend({ totalRamGb: 1, cpuCores: 1 }).id).toBe(RECOMMENDED[0].id)
   })
 
-  test("the ladder is ordered and every step demands more RAM than the last", () => {
+  test("the ladder never goes downhill", () => {
+    // Both lightweight entries legitimately sit at 4 GB, so the invariant is non-decreasing,
+    // not strictly increasing: a heavier model must never be listed below a lighter one.
     for (let i = 1; i < RECOMMENDED.length; i++)
-      expect(RECOMMENDED[i].minRamGb).toBeGreaterThan(RECOMMENDED[i - 1].minRamGb)
+      expect(RECOMMENDED[i].minRamGb).toBeGreaterThanOrEqual(RECOMMENDED[i - 1].minRamGb)
+    expect(RECOMMENDED[RECOMMENDED.length - 1].minRamGb).toBeGreaterThan(RECOMMENDED[0].minRamGb)
   })
 
   test("cpu cores do not drive the choice", () => {
     // RAM is the binding constraint for a resident model; a many-core box with little RAM
     // must not be recommended a model it cannot hold.
-    expect(recommend({ totalRamGb: 4, cpuCores: 64 }).id).toBe("qwen2.5-coder:1.5b")
+    expect(recommend({ totalRamGb: 4, cpuCores: 64 }).id).toBe("llama3.2:3b")
   })
 })
 

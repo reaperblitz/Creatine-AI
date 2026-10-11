@@ -12,9 +12,9 @@
  */
 
 import { Effect } from "effect"
+import { define } from "@opencode-ai/plugin/v2/effect/plugin"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
-import { define } from "../internal"
 
 export const OLLAMA_HOST = "http://127.0.0.1:11434"
 export const OLLAMA_PROVIDER_ID = "ollama"
@@ -24,31 +24,40 @@ export type Hardware = {
   readonly cpuCores: number
 }
 
-/** Models offered in ascending order of appetite; the first one that fits the RAM wins. */
+/**
+ * The models offered, ascending by appetite: two lightweight and two deeper, so the picker shows
+ * a real choice on a laptop and a real choice on a workstation rather than one "safe" option.
+ * The RAM and disk figures are surfaced in the display name - someone scanning a model list
+ * cannot tell that a 14B will thrash an 8 GB machine unless the list says so.
+ */
 export const RECOMMENDED = [
   {
     id: "qwen2.5-coder:1.5b",
     label: "Qwen2.5 Coder 1.5B",
     minRamGb: 4,
-    note: "smallest useful coding model, runs anywhere",
+    diskGb: 1,
+    note: "lightest - runs on almost anything",
+  },
+  {
+    id: "llama3.2:3b",
+    label: "Llama 3.2 3B",
+    minRamGb: 4,
+    diskGb: 2,
+    note: "lightest - general chat, not code-tuned",
   },
   {
     id: "qwen2.5-coder:7b",
     label: "Qwen2.5 Coder 7B",
     minRamGb: 8,
-    note: "good default for everyday coding",
+    diskGb: 5,
+    note: "deeper - the everyday default",
   },
   {
     id: "qwen2.5-coder:14b",
     label: "Qwen2.5 Coder 14B",
     minRamGb: 20,
-    note: "noticeably better reasoning, needs a real workstation",
-  },
-  {
-    id: "qwen2.5-coder:32b",
-    label: "Qwen2.5 Coder 32B",
-    minRamGb: 44,
-    note: "only worth it on a machine with plenty of RAM",
+    diskGb: 9,
+    note: "deepest listed - needs a real workstation",
   },
 ] as const
 
@@ -57,6 +66,7 @@ export type Recommendation = {
   readonly label: string
   readonly note: string
   readonly minRamGb: number
+  readonly diskGb: number
 }
 
 /**
@@ -154,29 +164,44 @@ export function pull(
   }).pipe(Effect.catch(() => Effect.succeed(false)))
 }
 
+export function displayName(model: Recommendation): string {
+  return `${model.label} - needs ${model.minRamGb} GB RAM, ~${model.diskGb} GB disk`
+}
+
 export const OllamaPlugin = define({
   id: "ollama",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
-        // A provider with no models is not autoloaded, so only surface Ollama once the daemon
-        // answers. Checking here rather than at startup avoids a slow boot on machines without it.
-        if (!(yield* Effect.promise(() => isRunning()))) return
-        yield* Effect.promise(() => listModels()).pipe(
-          Effect.map((models) => {
-            evt.provider.update(ProviderV2.ID.make(OLLAMA_PROVIDER_ID), (provider) => {
-              provider.name = "Ollama (local)"
-            })
-            for (const name of models) {
-              evt.model.update(ProviderV2.ID.make(OLLAMA_PROVIDER_ID), ModelV2.ID.make(name), (model) => {
-                model.name = name
-              })
-            }
-          }),
-          Effect.orDie,
-        )
+        const providerID = ProviderV2.ID.make(OLLAMA_PROVIDER_ID)
+        const installed = yield* Effect.promise(() => listModels()).pipe(Effect.orElseSucceed(() => [] as []))
+
+        // Register unconditionally: the provider exists in the picker whether or not a daemon is
+        // up yet, so a machine that installs Ollama later does not need a restart to see it.
+        evt.provider.update(providerID, (provider) => {
+          provider.name = "Ollama (local)"
+          provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: `${OLLAMA_HOST}/v1` }
+        })
+
+        // The curated list first so a fresh machine has something to pick, then anything the
+        // user already pulled, which is how their own models show up without configuration.
+        for (const model of [...RECOMMENDED, ...installed.map(toListing)]) {
+          const modelID = ModelV2.ID.make(model.id)
+          evt.model.update(providerID, modelID, (draft) => {
+            draft.name = displayName(model)
+            draft.cost = [{ input: 0, output: 0, cache: { read: 0, write: 0 } }]
+            draft.capabilities = { tools: true, input: ["text"], output: ["text"] }
+            draft.limit = { context: 32_000, output: 8_192 }
+          })
+        }
       }),
     )
   }),
 })
+
+/** An already-pulled model we do not curate, so its size is unknown and requirements are vague. */
+function toListing(name: string): Recommendation {
+  const curated = RECOMMENDED.find((item) => item.id === name)
+  return curated ?? { id: name, label: name, minRamGb: 0, diskGb: 0, note: "already installed locally" }
+}
 
