@@ -17,12 +17,13 @@ import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
-  openai: 2,
-  "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
+  ollama: 0,
+  opencode: 1,
+  "opencode-go": 2,
+  openai: 3,
+  "github-copilot": 4,
+  anthropic: 5,
+  google: 6,
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__creatine_custom_provider__"
