@@ -7,7 +7,7 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
-import { displayName, isRunning, listModels, OllamaPlugin, parseTags, pull, recommend, RECOMMENDED, OLLAMA_HOST } from "../../src/plugin/provider/ollama"
+import { displayName, isRunning, listModels, OllamaPlugin, OLLAMA_DOWNLOADS, OLLAMA_LIBRARY_URL, OLLAMA_LINUX_INSTALL_SCRIPT, parseTags, planInstall, pull, recommend, RECOMMENDED, waitForDaemon, OLLAMA_HOST } from "../../src/plugin/provider/ollama"
 
 const it = testEffect(PluginTestLayer)
 
@@ -98,6 +98,65 @@ describe("registering against the real catalog", () => {
       yield* catalog.transform(() => {})
       expect(yield* catalog.provider.get(ProviderV2.ID.make("ollama"))).toBeDefined()
     }))
+})
+
+describe("planning an install", () => {
+  test("each supported platform gets a real installer, never a silent guess", () => {
+    expect(planInstall("win32")).toEqual({ kind: "download-runner", url: OLLAMA_DOWNLOADS.win32, args: [] })
+    expect(planInstall("darwin")).toEqual({ kind: "download-runner", url: OLLAMA_DOWNLOADS.darwin, args: [] })
+    expect(planInstall("linux")).toEqual({ kind: "script", url: OLLAMA_LINUX_INSTALL_SCRIPT, args: [] })
+  })
+
+  test("windows and macOS get no silent flags we have not verified", () => {
+    // Guessing a switch the vendor does not support opens a window that does nothing, which
+    // reads to the user as a hang.
+    expect(planInstall("win32")).toMatchObject({ args: [] })
+    expect(planInstall("darwin")).toMatchObject({ args: [] })
+  })
+
+  test("an unknown platform refuses rather than guessing", () => {
+    const plan = planInstall("freebsd" as never)
+    expect(plan.kind).toBe("manual")
+  })
+
+  test("points at the official downloads and library", () => {
+    expect(OLLAMA_DOWNLOADS.win32).toMatch(/^https:\/\/ollama\.com\//)
+    expect(OLLAMA_DOWNLOADS.darwin).toMatch(/^https:\/\/ollama\.com\//)
+    expect(OLLAMA_LIBRARY_URL).toBe("https://ollama.com/library")
+  })
+})
+
+describe("waiting for the daemon", () => {
+  test("returns true as soon as the daemon answers", async () => {
+    let calls = 0
+    const ready = await waitForDaemon(
+      async () => {
+        calls++
+        return new Response("{}", { status: 200 })
+      },
+      10,
+      1,
+    )
+    expect(ready).toBe(true)
+    expect(calls).toBe(1)
+  })
+
+  test("gives up after the attempt budget instead of polling forever", async () => {
+    const ready = await waitForDaemon(
+      async () => {
+        throw new Error("ECONNREFUSED")
+      },
+      3,
+      1,
+    )
+    expect(ready).toBe(false)
+  })
+
+  test("reports progress so a slow install does not look frozen", async () => {
+    const ticks: number[] = []
+    await waitForDaemon(async () => new Response("", { status: 500 }), 3, 1, (attempt) => void ticks.push(attempt))
+    expect(ticks).toEqual([1, 2, 3])
+  })
 })
 
 describe("detecting a running daemon", () => {

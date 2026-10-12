@@ -40,6 +40,8 @@ import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
+import { installOllama } from "./ollama/install"
+import { OLLAMA_LIBRARY_URL, RECOMMENDED } from "@opencode-ai/core/plugin/provider/ollama"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -594,6 +596,34 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "ollama.install",
+        title: "Install Ollama (local models)",
+        suggested: true,
+        category: "Providers",
+        slashName: "install-ollama",
+        run: () => {
+          toast.show({ variant: "info", message: "Installing Ollama. The installer window will open - follow it." })
+          void installOllama((step) => {
+            if (step.phase === "failed") toast.show({ variant: "error", message: step.message })
+            if (step.phase === "download" && step.percent === 100)
+              toast.show({ variant: "info", message: "Downloaded. Starting the installer..." })
+          }).then((ok) => {
+            if (ok) toast.show({ variant: "success", message: "Ollama is running on port 11434." })
+          })
+        },
+      },
+      {
+        name: "ollama.models",
+        title: "Browse Ollama models",
+        suggested: true,
+        category: "Providers",
+        slashName: "ollama-models",
+        run: () => {
+          const rows = RECOMMENDED.map((model) => `ollama pull ${model.id}   (${model.minRamGb} GB RAM)`).join("\n")
+          toast.show({ variant: "info", message: `Pick one and run it:\n${rows}\n\nFull library: ${OLLAMA_LIBRARY_URL}` })
         },
       },
       {

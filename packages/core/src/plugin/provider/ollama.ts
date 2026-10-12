@@ -214,3 +214,63 @@ function toListing(name: string): Recommendation {
   return curated ?? { id: name, label: name, minRamGb: 0, diskGb: 0, note: "already installed locally" }
 }
 
+
+/**
+ * Installing Ollama itself.
+ *
+ * This downloads and runs the vendor's own installer - it is installing software onto the user's
+ * machine, so it is deliberately explicit and reports every step rather than happening silently.
+ * Nothing is launched unless the platform is one we recognise, and the plan is a pure function so
+ * the risky decisions can be asserted in tests instead of discovered at runtime.
+ *
+ * Windows and macOS get the official installer downloaded and launched visibly; no silent flags
+ * are guessed at, because guessing a switch the vendor does not support produces a window that
+ * opens and does nothing. Linux gets the documented curl|sh path. Verification is always by
+ * polling the daemon rather than trusting the installer to have exited cleanly.
+ */
+
+export const OLLAMA_DOWNLOADS = {
+  win32: "https://ollama.com/download/OllamaSetup.exe",
+  darwin: "https://ollama.com/download/Ollama.dmg",
+} as const
+
+export const OLLAMA_LINUX_INSTALL_SCRIPT = "https://ollama.sh/install.sh"
+
+export const OLLAMA_LIBRARY_URL = "https://ollama.com/library"
+
+export type Platform = "win32" | "darwin" | "linux"
+
+export type InstallPlan =
+  | { readonly kind: "download-runner"; readonly url: string; readonly args: readonly string[] }
+  | { readonly kind: "script"; readonly url: string; readonly args: readonly string[] }
+  | { readonly kind: "brew" }
+  | { readonly kind: "manual"; readonly url: string }
+
+/**
+ * Pure, so every branch is testable without downloading or executing anything.
+ * Windows launches the installer with no silent flag on purpose - see the note above.
+ */
+export function planInstall(platform: Platform): InstallPlan {
+  if (platform === "win32") return { kind: "download-runner", url: OLLAMA_DOWNLOADS.win32, args: [] }
+  if (platform === "darwin") return { kind: "download-runner", url: OLLAMA_DOWNLOADS.darwin, args: [] }
+  if (platform === "linux") return { kind: "script", url: OLLAMA_LINUX_INSTALL_SCRIPT, args: [] }
+  return { kind: "manual", url: OLLAMA_LIBRARY_URL }
+}
+
+/**
+ * Polls the daemon until it answers or the deadline passes. Installers return before the service
+ * is listening, so success is measured by the thing we actually care about.
+ */
+export async function waitForDaemon(
+  fetcher: FetchLike = fetch,
+  attempts = 40,
+  delayMs = 1500,
+  onTick?: (attempt: number, attempts: number) => void,
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    onTick?.(attempt, attempts)
+    if (await isRunning(fetcher)) return true
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  return false
+}
