@@ -105,10 +105,19 @@ export async function isRunning(fetcher: FetchLike = fetch, host = OLLAMA_HOST):
   }
 }
 
+/**
+ * Never throws. A machine with no daemon running is the normal case, not an error, and a
+ * rejected fetch here would otherwise take the whole catalog transform down with it - which is
+ * why the catch is internal rather than left to the caller.
+ */
 export async function listModels(fetcher: FetchLike = fetch, host = OLLAMA_HOST): Promise<string[]> {
-  const response = await fetcher(`${host}/api/tags`, { signal: AbortSignal.timeout(5000) })
-  if (!response.ok) return []
-  return parseTags(await response.json())
+  try {
+    const response = await fetcher(`${host}/api/tags`, { signal: AbortSignal.timeout(1500) })
+    if (!response.ok) return []
+    return parseTags(await response.json())
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -174,7 +183,7 @@ export const OllamaPlugin = define({
     yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         const providerID = ProviderV2.ID.make(OLLAMA_PROVIDER_ID)
-        const installed = yield* Effect.promise(() => listModels()).pipe(Effect.orElseSucceed(() => [] as []))
+        const installed = yield* Effect.tryPromise(() => listModels()).pipe(Effect.orElseSucceed(() => [] as string[]))
 
         // Register unconditionally: the provider exists in the picker whether or not a daemon is
         // up yet, so a machine that installs Ollama later does not need a restart to see it.
