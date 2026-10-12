@@ -42,6 +42,7 @@ import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { installOllama } from "./ollama/install"
 import { OLLAMA_LIBRARY_URL, RECOMMENDED } from "@opencode-ai/core/plugin/provider/ollama"
+import { OMNIROUTE_DASHBOARD_URL, OMNIROUTE_INSTALL } from "@opencode-ai/core/plugin/provider/omniroute"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -596,6 +597,24 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "omniroute.setup",
+        title: "Set up OmniRoute (local gateway)",
+        suggested: true,
+        category: "Providers",
+        slashName: "omniroute",
+        run: () => {
+          toast.show({
+            variant: "info",
+            message:
+              `1. Install: ${OMNIROUTE_INSTALL}\n` +
+              `2. Start it, then open ${OMNIROUTE_DASHBOARD_URL}\n` +
+              "3. Endpoint -> Registered Keys -> create a key\n" +
+              "4. Set OMNIROUTE_API_KEY in your environment\n" +
+              "5. Pick OmniRoute in the model picker",
+          })
         },
       },
       {
