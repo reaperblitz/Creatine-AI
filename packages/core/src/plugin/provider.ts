@@ -20,6 +20,7 @@ import { MistralPlugin } from "./provider/mistral"
 import { NvidiaPlugin } from "./provider/nvidia"
 import { OpenAIPlugin } from "./provider/openai"
 import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex"
+import { OmniRoutePlugin } from "./provider/omniroute"
 import { OpenAICompatiblePlugin } from "./provider/openai-compatible"
 import { OpencodePlugin } from "./provider/opencode"
 import { OllamaPlugin } from "./provider/ollama"
@@ -58,6 +59,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   NvidiaPlugin,
   OpencodePlugin,
   SnowflakeCortexPlugin,
+  OmniRoutePlugin,
   OpenAICompatiblePlugin,
   OpenAIPlugin,
   OllamaPlugin,

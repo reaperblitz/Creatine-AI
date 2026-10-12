@@ -18,12 +18,13 @@ import { useClipboard } from "../context/clipboard"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   ollama: 0,
-  opencode: 1,
-  "opencode-go": 2,
-  openai: 3,
-  "github-copilot": 4,
-  anthropic: 5,
-  google: 6,
+  omniroute: 1,
+  opencode: 2,
+  "opencode-go": 3,
+  openai: 4,
+  "github-copilot": 5,
+  anthropic: 6,
+  google: 7,
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__creatine_custom_provider__"
@@ -64,6 +65,8 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
           anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
           "opencode-go": "Low cost subscription for everyone",
+          omniroute: "(local gateway, no key)",
+          ollama: "(local, no key)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
