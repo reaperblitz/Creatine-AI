@@ -1408,10 +1408,16 @@ const layer = Layer.effect(
       // missing from this catalogue - which is why registering Ollama and OmniRoute as plugins
       // alone left them invisible in /connect. Inject them here so they take part normally.
       const localEnv = yield* env.all()
+      const localConfig = {
+        omnirouteUrl: cfg.provider?.["omniroute"]?.options?.["baseURL"],
+        omnirouteKey: cfg.provider?.["omniroute"]?.options?.["apiKey"],
+        ollamaUrl: cfg.provider?.["ollama"]?.options?.["baseURL"],
+        ollamaKey: cfg.provider?.["ollama"]?.options?.["apiKey"],
+      }
       const discovered = yield* Effect.forEach(localProviderSpecs(localEnv), (spec) =>
-        Effect.promise(() => discover(spec.baseUrl, spec.apiKey)),
+        Effect.promise(() => discover(spec.baseUrl, spec.apiKey || localConfig.omnirouteKey || "")),
       ).pipe(Effect.map((found) => Object.fromEntries(found.map((models, i) => [localProviderSpecs(localEnv)[i]!.id, models]))))
-      for (const spec of localProviderSpecs(localEnv, discovered))
+      for (const spec of localProviderSpecs(localEnv, discovered, localConfig))
         catalog[spec.id] = toInfo(spec) as unknown as (typeof catalog)[string]
         const database = mapValues(catalog, toPublicInfo)
 

@@ -24,19 +24,35 @@ export const OMNIROUTE_DEFAULT_URL = "http://localhost:20128/v1"
  * Both base URLs are user-configurable. OmniRoute in particular is often proxied or moved, and
  * hard-coding a port is the kind of thing that works on my machine and nowhere else.
  */
+export type LocalConfig = {
+  readonly omnirouteUrl?: string
+  readonly omnirouteKey?: string
+  readonly ollamaUrl?: string
+  readonly ollamaKey?: string
+}
+
+/**
+ * Config first, environment second.
+ *
+ * Config wins because it is the only one of the two a user can edit without a shell. The TUI's
+ * API-key field does not accept a paste, so requiring an env var to get a key in is not an
+ * acceptable requirement. `provider.omniroute.options.apiKey` in the config file is the
+ * obvious place to look.
+ */
 export function localProviderSpecs(
   env: Record<string, string | undefined> = process.env,
   discovered: Record<string, Discovered> = {},
+  config: LocalConfig = {},
 ): LocalProviderSpec[] {
-  const omnirouteKey = env["OMNIROUTE_API_KEY"]?.trim()
+  const omnirouteKey = config.omnirouteKey?.trim() || env["OMNIROUTE_API_KEY"]?.trim()
   return [
     {
       id: "ollama",
       name: "Ollama (local)",
-      baseUrl: env["OLLAMA_URL"]?.trim() || OLLAMA_DEFAULT_URL,
+      baseUrl: config.ollamaUrl?.trim() || env["OLLAMA_URL"]?.trim() || OLLAMA_DEFAULT_URL,
       // Ollama ignores the key entirely but the OpenAI-compatible SDK refuses to send a request
       // without one, so a placeholder is required rather than merely convenient.
-      apiKey: env["OLLAMA_API_KEY"]?.trim() || "ollama",
+      apiKey: config.ollamaKey?.trim() || env["OLLAMA_API_KEY"]?.trim() || "ollama",
       models: discovered["ollama"]?.length
         ? discovered["ollama"]
         : [
@@ -49,7 +65,7 @@ export function localProviderSpecs(
     {
       id: "omniroute",
       name: "OmniRoute (local gateway)",
-      baseUrl: env["OMNIROUTE_URL"]?.trim() || OMNIROUTE_DEFAULT_URL,
+      baseUrl: config.omnirouteUrl?.trim() || env["OMNIROUTE_URL"]?.trim() || OMNIROUTE_DEFAULT_URL,
       // OmniRoute's /v1/models answers 401 even with REQUIRE_API_KEY=false, so a missing key is
       // surfaced plainly rather than producing a gateway that silently lists nothing.
       apiKey: omnirouteKey || "",
@@ -76,9 +92,27 @@ export type Discovered = readonly { id: string; name: string }[]
  * A gateway that cannot be reached yields an empty list, and the provider still appears - just
  * without models, which is honest.
  */
-export async function discover(baseUrl: string, apiKey: string, timeoutMs = 2500): Promise<Discovered> {
+export async function discover(
+  baseUrl: string,
+  apiKey: string,
+  timeoutMs = 4000,
+  attempts = 3,
+): Promise<Discovered> {
+  const url = `${baseUrl.replace(/\/$/, "")}/models`
+  // A busy gateway intermittently answers 401/timeout while it is warming a route up. Probing
+  // once turned that blip into "the user has no models", because the fallback list is small and
+  // wrong. Three tries removes it without meaningfully slowing startup.
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const found = await probe(url, apiKey, timeoutMs)
+    if (found.length > 0) return found
+    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 600))
+  }
+  return []
+}
+
+async function probe(url: string, apiKey: string, timeoutMs: number): Promise<Discovered> {
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/models`, {
+    const response = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
       headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
     })

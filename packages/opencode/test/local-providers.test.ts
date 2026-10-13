@@ -123,7 +123,7 @@ describe("discovering from a live gateway", () => {
         return new Response(JSON.stringify({ data: [{ id: "cc/claude-opus-4-7" }] }), { status: 200 })
       }) as unknown as typeof fetch,
       async () => {
-        expect(await discover("http://localhost:20128/v1", "k")).toEqual([
+        expect(await discover("http://localhost:20128/v1", "k", 1000, 1)).toEqual([
           { id: "cc/claude-opus-4-7", name: "cc/claude-opus-4-7" },
         ])
         expect(called).toBe("http://localhost:20128/v1/models")
@@ -141,14 +141,14 @@ describe("discovering from a live gateway", () => {
           { status: 200 },
         )) as unknown as typeof fetch,
       async () => {
-        expect((await discover("http://x/v1", "k")).map((m) => m.id)).toEqual(["cc/ok"])
+        expect((await discover("http://x/v1", "k", 1000, 1)).map((m) => m.id)).toEqual(["cc/ok"])
       },
     )
   })
 
   test("a 401 yields an empty list rather than throwing", async () => {
     await withFetch((async () => new Response("nope", { status: 401 })) as unknown as typeof fetch, async () => {
-      expect(await discover("http://localhost:20128/v1", "")).toEqual([])
+      expect(await discover("http://localhost:20128/v1", "", 1000, 1)).toEqual([])
     })
   })
 
@@ -158,7 +158,7 @@ describe("discovering from a live gateway", () => {
         throw new Error("ECONNREFUSED")
       }) as unknown as typeof fetch,
       async () => {
-        expect(await discover("http://localhost:20128/v1", "k")).toEqual([])
+        expect(await discover("http://localhost:20128/v1", "k", 1000, 1)).toEqual([])
       },
     )
   })
@@ -171,7 +171,7 @@ describe("discovering from a live gateway", () => {
         return new Response(JSON.stringify({ data: [] }), { status: 200 })
       }) as unknown as typeof fetch,
       async () => {
-        await discover("http://localhost:20128/v1", "")
+        await discover("http://localhost:20128/v1", "", 1000, 1)
         expect(seen).toEqual({})
       },
     )
