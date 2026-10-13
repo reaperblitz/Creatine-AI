@@ -42,7 +42,7 @@ import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { installOllama } from "./ollama/install"
 import { OLLAMA_LIBRARY_URL, RECOMMENDED } from "@opencode-ai/core/plugin/provider/ollama"
-import { OMNIROUTE_DASHBOARD_URL, OMNIROUTE_INSTALL } from "@opencode-ai/core/plugin/provider/omniroute"
+
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -68,7 +68,7 @@ import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { boardGameCommand, openTerminalWindow } from "./terminal-window"
-import { OMNIROUTE_SETUP_FILE, omnirouteSetupCommand, omnirouteSetupScript } from "./ollama/omniroute-setup"
+import { configFilePath, OMNIROUTE_SETUP_FILE, omnirouteSetupCommand, omnirouteSetupScript } from "./ollama/omniroute-setup"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -612,7 +612,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           // A real terminal, not a dialog: setup means running commands and pasting a key, and
           // the in-app key field does not accept a paste.
           const script = path.join(tmpdir(), OMNIROUTE_SETUP_FILE)
-          void Bun.write(script, omnirouteSetupScript(path.join(Global.Path.config, "creatine.json")))
+          void Bun.write(script, omnirouteSetupScript(configFilePath(Global.Path.config)))
             .then(() => {
               const pid = openTerminalWindow(omnirouteSetupCommand(script))
               if (pid) toast.show({ variant: "info", message: "Opened an OmniRoute setup window." })

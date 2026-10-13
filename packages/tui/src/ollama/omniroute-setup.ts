@@ -7,10 +7,30 @@
  * vanish when a command finishes.
  */
 
+import path from "node:path"
 import { OLLAMA_LIBRARY_URL } from "@opencode-ai/core/plugin/provider/ollama"
 import { OMNIROUTE_DASHBOARD_URL, OMNIROUTE_HOST, OMNIROUTE_INSTALL } from "@opencode-ai/core/plugin/provider/omniroute"
 
 export const OMNIROUTE_SETUP_FILE = "creatine-omniroute-setup.cmd"
+
+/**
+ * The config file Creatine actually reads, in the order the loader tries them.
+ *
+ * Verified against `packages/opencode/src/config/config.ts`: the candidates are opencode.jsonc,
+ * opencode.json, then config.json. There is no `creatine.json`. Pointing a user at one writes
+ * their configuration somewhere the loader never looks, and it is silently ignored - which is
+ * exactly the kind of failure that reads as "Creatine is broken".
+ */
+export function configFilePath(
+  configDir: string,
+  exists: (file: string) => boolean = (file) => Bun.file(file).size >= 0 || true,
+): string {
+  for (const name of ["opencode.jsonc", "opencode.json", "config.json"]) {
+    const candidate = path.join(configDir, name)
+    if (exists(candidate)) return candidate
+  }
+  return path.join(configDir, "opencode.json")
+}
 
 /**
  * Escapes a value for cmd so a path or key containing `%` or `^` - both of which real values can
@@ -20,10 +40,10 @@ function cmd(value: string) {
   return value.replace(/%/g, "%%").replace(/\^/g, "^^")
 }
 
-const probe = (path: string, variable: string, letter: string, host: string) =>
-  `for /f "tokens=1" %%${letter} in ('curl.exe -s -o nul -w "%%{http_code}" --connect-timeout 3 ${host}${path}') do set "${variable}=%%${letter}"`
+const probe = (route: string, variable: string, letter: string, host: string) =>
+  `for /f "tokens=1" %%${letter} in ('curl.exe -s -o nul -w "%%{http_code}" --connect-timeout 3 ${host}${route}') do set "${variable}=%%${letter}"`
 
-export function omnirouteSetupScript(configPath: string): string {
+export function omnirouteSetupScript(configFile: string): string {
   const host = OMNIROUTE_HOST
   return [
     "@echo off",
@@ -37,8 +57,8 @@ export function omnirouteSetupScript(configPath: string): string {
     "echo  STEP 1 - is it already running?",
     "echo.",
     // Captured into variables, never branched on inline: cmd expands %errorlevel% at parse time,
-    // before curl runs, so `if %errorlevel%` after curl always reads the previous command's value.
-    // Reading curl's own output through `for /f` sidesteps that entirely.
+    // before curl runs, so `if %errorlevel%` after curl always reads the previous command's
+    // value. Reading curl's own output through `for /f` sidesteps that entirely.
     'set "HEALTH="',
     probe("/api/health", "HEALTH", "h", host),
     'set "MODELS="',
@@ -88,7 +108,7 @@ export function omnirouteSetupScript(configPath: string): string {
     "echo.",
     "echo    Open this file:",
     "echo.",
-    `echo      ${cmd(configPath)}`,
+    `echo      ${cmd(configFile)}`,
     "echo.",
     'echo    Add this under the top-level "provider" key, keeping everything',
     "echo    already in the file (mcp, plugin, theme, and so on):",
@@ -108,7 +128,7 @@ export function omnirouteSetupScript(configPath: string): string {
     'echo              "auto/cheap": { "name": "auto/cheap" },',
     'echo              "auto/claude-sonnet": { "name": "auto/claude-sonnet" },',
     'echo              "oc/deepseek-v4-flash-free": { "name": "oc/deepseek-v4-flash-free" }',
-    "echo            }",
+    "echo            },",
     "echo          }",
     "echo        }",
     "echo      }",
@@ -120,6 +140,7 @@ export function omnirouteSetupScript(configPath: string): string {
     `echo      curl.exe ${host}/v1/models -H "Authorization: Bearer YOUR-KEY"`,
     "echo.",
     "echo    Then fully restart Creatine. OmniRoute will be in the model picker",
+    "echo    with every model your gateway serves.",
     "echo.",
     "echo  ------------------------------------------------------------",
     `echo  More local models: ${OLLAMA_LIBRARY_URL}`,
