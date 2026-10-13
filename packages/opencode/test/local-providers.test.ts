@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { localProviderSpecs, OLLAMA_DEFAULT_URL, OMNIROUTE_DEFAULT_URL, toInfo } from "../src/provider/local-providers"
+import { discover, localProviderSpecs, OLLAMA_DEFAULT_URL, OMNIROUTE_DEFAULT_URL, toInfo } from "../src/provider/local-providers"
 
 describe("local providers are present", () => {
   test("both local providers are offered without any configuration", () => {
@@ -74,5 +74,106 @@ describe("model listings", () => {
   test("omniroute models keep their route prefix, which is part of the id", () => {
     const [, omni] = localProviderSpecs({})
     for (const model of omni.models) expect(model.id).toMatch(/^[a-z]+\//)
+  })
+})
+describe("discovery beats the placeholder list", () => {
+  const real = [
+    { id: "cc/claude-sonnet-4-6", name: "cc/claude-sonnet-4-6" },
+    { id: "gh/gpt-5.1-codex", name: "gh/gpt-5.1-codex" },
+  ]
+
+  test("a running gateway's own models replace the made-up ids", () => {
+    // The bug this fixes: a hard-coded list is worse than none, because picking an id the
+    // gateway does not serve 404s at send time.
+    const [, omni] = localProviderSpecs({ OMNIROUTE_API_KEY: "k" }, { omniroute: real })
+    expect(omni.models.map((m) => m.id)).toEqual(["cc/claude-sonnet-4-6", "gh/gpt-5.1-codex"])
+  })
+
+  test("a gateway that returns nothing still yields the placeholders, so the provider is usable", () => {
+    const [, omni] = localProviderSpecs({}, { omniroute: [] })
+    expect(omni.models.length).toBeGreaterThan(0)
+  })
+
+  test("an unreachable gateway does not stop either provider being registered", () => {
+    expect(localProviderSpecs({}).map((s) => s.id)).toEqual(["ollama", "omniroute"])
+  })
+
+  test("discovery reaches ollama too", () => {
+    const [ollama] = localProviderSpecs({}, { ollama: [{ id: "llama3.2:3b", name: "llama3.2:3b" }] })
+    expect(ollama.models.map((m) => m.id)).toEqual(["llama3.2:3b"])
+  })
+})
+
+describe("discovering from a live gateway", () => {
+  const withFetch = async (impl: typeof fetch, run: () => Promise<void>) => {
+    const original = globalThis.fetch
+    globalThis.fetch = impl
+    try {
+      await run()
+    } finally {
+      globalThis.fetch = original
+    }
+  }
+
+  test("asks the gateway's own /models endpoint", async () => {
+    let called = ""
+    await withFetch(
+      (async (input: string) => {
+        called = String(input)
+        return new Response(JSON.stringify({ data: [{ id: "cc/claude-opus-4-7" }] }), { status: 200 })
+      }) as unknown as typeof fetch,
+      async () => {
+        expect(await discover("http://localhost:20128/v1", "k")).toEqual([
+          { id: "cc/claude-opus-4-7", name: "cc/claude-opus-4-7" },
+        ])
+        expect(called).toBe("http://localhost:20128/v1/models")
+      },
+    )
+  })
+
+  test("drops models that cannot serve a completion", async () => {
+    await withFetch(
+      (async () =>
+        new Response(
+          JSON.stringify({
+            data: [{ id: "nebius/Qwen3-Embedding-8B" }, { id: "openai/gpt-image-2" }, { id: "cc/ok" }],
+          }),
+          { status: 200 },
+        )) as unknown as typeof fetch,
+      async () => {
+        expect((await discover("http://x/v1", "k")).map((m) => m.id)).toEqual(["cc/ok"])
+      },
+    )
+  })
+
+  test("a 401 yields an empty list rather than throwing", async () => {
+    await withFetch((async () => new Response("nope", { status: 401 })) as unknown as typeof fetch, async () => {
+      expect(await discover("http://localhost:20128/v1", "")).toEqual([])
+    })
+  })
+
+  test("a refused connection yields an empty list rather than throwing", async () => {
+    await withFetch(
+      (async () => {
+        throw new Error("ECONNREFUSED")
+      }) as unknown as typeof fetch,
+      async () => {
+        expect(await discover("http://localhost:20128/v1", "k")).toEqual([])
+      },
+    )
+  })
+
+  test("sends no authorization header when there is no key", async () => {
+    let seen: unknown
+    await withFetch(
+      (async (_input: string, init?: RequestInit) => {
+        seen = init?.headers
+        return new Response(JSON.stringify({ data: [] }), { status: 200 })
+      }) as unknown as typeof fetch,
+      async () => {
+        await discover("http://localhost:20128/v1", "")
+        expect(seen).toEqual({})
+      },
+    )
   })
 })

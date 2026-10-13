@@ -1,4 +1,4 @@
-import { localProviderSpecs, toInfo } from "./local-providers"
+import { discover, localProviderSpecs, toInfo } from "./local-providers"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -1407,7 +1407,12 @@ const layer = Layer.effect(
       // Locally-run providers are not in models.dev, and everything downstream drops anything
       // missing from this catalogue - which is why registering Ollama and OmniRoute as plugins
       // alone left them invisible in /connect. Inject them here so they take part normally.
-      for (const spec of localProviderSpecs(yield* env.all())) catalog[spec.id] = toInfo(spec) as unknown as (typeof catalog)[string]
+      const localEnv = yield* env.all()
+      const discovered = yield* Effect.forEach(localProviderSpecs(localEnv), (spec) =>
+        Effect.promise(() => discover(spec.baseUrl, spec.apiKey)),
+      ).pipe(Effect.map((found) => Object.fromEntries(found.map((models, i) => [localProviderSpecs(localEnv)[i]!.id, models]))))
+      for (const spec of localProviderSpecs(localEnv, discovered))
+        catalog[spec.id] = toInfo(spec) as unknown as (typeof catalog)[string]
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
