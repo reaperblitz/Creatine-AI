@@ -168,8 +168,10 @@ export function DialogModel(props: { providerID?: string }) {
     }
     toast.show({
       variant: "error",
+      title: "OmniRoute gateway is not running",
+      duration: 12000,
       message:
-        `OmniRoute gateway is not running at ${base}, so this model cannot answer yet.\n` +
+        `Nothing is listening at ${base}, so this model cannot answer yet.\n` +
         `Start it in a terminal (run "omniroute" and leave the window open), or type /omniroute for the guided setup.\n` +
         `If your gateway lives somewhere else, set provider.omniroute.options.baseURL in opencode.json.`,
     })
