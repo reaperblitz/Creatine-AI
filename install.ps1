@@ -451,7 +451,7 @@ fs.writeFileSync(file, applyEdits(text, edits));
 }
 
 
-# 8. Display Success Message
+# 9. Display Success Message
 Write-Host ""
 $Logo | ForEach-Object { Write-Host "${MUTED}$_${NC}" }
 Write-Host ""
