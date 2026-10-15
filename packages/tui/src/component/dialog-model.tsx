@@ -3,6 +3,7 @@ import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
+import { useToast } from "../ui/toast"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
@@ -139,8 +140,48 @@ export function DialogModel(props: { providerID?: string }) {
     return value.name
   })
 
+  const toast = useToast()
+
+  /**
+   * Reads the configured gateway URL out of the synced config, so a user who moved or proxied
+   * their gateway is probed where it actually lives rather than where the default says.
+   */
+  function gatewayBaseURL(): string {
+    const configured = (sync.data.config as unknown as { provider?: Record<string, { options?: { baseURL?: string } }> })
+      ?.provider?.["omniroute"]?.options?.baseURL
+    const trimmed = typeof configured === "string" ? configured.trim().replace(/\/$/, "") : ""
+    return trimmed || "http://localhost:20128"
+  }
+
+  /**
+   * Fires when an OmniRoute model is picked. If the gateway answers, this is silent - success
+   * needs no announcement. If nothing is listening, it says exactly that and how to fix it,
+   * instead of leaving the failure for the first message send.
+   */
+  async function checkOmniRouteGateway() {
+    const base = gatewayBaseURL()
+    try {
+      const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2500) })
+      if (response.ok) return
+    } catch {
+      // Falls through to the message below: unreachable and unhealthy look the same to the user.
+    }
+    toast.show({
+      variant: "error",
+      message:
+        `OmniRoute gateway is not running at ${base}, so this model cannot answer yet.\n` +
+        `Start it in a terminal (run "omniroute" and leave the window open), or type /omniroute for the guided setup.\n` +
+        `If your gateway lives somewhere else, set provider.omniroute.options.baseURL in opencode.json.`,
+    })
+  }
+
   function onSelect(providerID: string, modelID: string) {
     local.model.set({ providerID, modelID }, { recent: true })
+    // Gateway check, and only for the one case it covers: OmniRoute serves from a process on
+    // this machine, and if that process is not running every request fails with a connection
+    // error. Catching it here turns a cryptic provider failure into an instruction. Nothing else
+    // is probed; any other provider's errors are its own business.
+    if (providerID === "omniroute") void checkOmniRouteGateway()
     const list = local.model.variant.list()
     const cur = local.model.variant.selected()
     if (cur === "default" || (cur && list.includes(cur))) {
